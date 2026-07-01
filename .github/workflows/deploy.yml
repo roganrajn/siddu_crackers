@@ -22,45 +22,26 @@ jobs:
 
             PROJECT_DIR="/var/www/html/SidduCrackers"
 
-            echo "===================================="
-            echo "Starting Deployment..."
-            echo "===================================="
+            echo "========== Starting Deployment =========="
 
             cd $PROJECT_DIR
 
-            echo "Updating repository..."
+            echo "Updating source..."
             git fetch origin
             git reset --hard origin/main
 
-            echo "===================================="
-            echo "Installing Frontend Dependencies..."
-            echo "===================================="
-
+            echo "Building Frontend..."
             cd frontend
             npm install
             npm run build
 
-            echo "===================================="
-            echo "Installing Backend Dependencies..."
-            echo "===================================="
-
+            echo "Installing Backend..."
             cd ../backend
             npm install
 
-            echo "===================================="
             echo "Restarting Backend..."
-            echo "===================================="
-
             pm2 restart sidducrackers-backend || pm2 start npm --name sidducrackers-backend -- start
-
-            echo "===================================="
-            echo "Restarting Frontend..."
-            echo "===================================="
-
-            pm2 restart sidducrackers-frontend || pm2 start npm --name sidducrackers-frontend -- start
 
             pm2 save
 
-            echo "===================================="
-            echo "Deployment Completed Successfully!"
-            echo "===================================="
+            echo "========== Deployment Completed =========="
