@@ -40,7 +40,7 @@ jobs:
             npm install
 
             echo "Restarting Backend..."
-            pm2 restart sidducrackers-backend || pm2 start npm --name sidducrackers-backend -- start
+            pm2 restart siddu-backend
 
             pm2 save
 
