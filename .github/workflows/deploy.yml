@@ -7,11 +7,10 @@ on:
 
 jobs:
   deploy:
-    name: Deploy Application
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
+      - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.HOST }}
@@ -23,40 +22,45 @@ jobs:
 
             PROJECT_DIR="/var/www/html/SidduCrackers"
 
-            echo "=================================="
+            echo "===================================="
             echo "Starting Deployment..."
-            echo "=================================="
+            echo "===================================="
 
             cd $PROJECT_DIR
 
-            echo "Pulling latest code..."
+            echo "Updating repository..."
             git fetch origin
             git reset --hard origin/main
 
-            echo "=================================="
-            echo "Building Frontend..."
-            echo "=================================="
+            echo "===================================="
+            echo "Installing Frontend Dependencies..."
+            echo "===================================="
 
             cd frontend
             npm install
             npm run build
 
-            echo "=================================="
-            echo "Installing Backend..."
-            echo "=================================="
+            echo "===================================="
+            echo "Installing Backend Dependencies..."
+            echo "===================================="
 
             cd ../backend
             npm install
 
-            echo "=================================="
-            echo "Restarting PM2..."
-            echo "=================================="
+            echo "===================================="
+            echo "Restarting Backend..."
+            echo "===================================="
 
-            pm2 restart sidducrackers-backend
-            pm2 restart sidducrackers-frontend
+            pm2 restart sidducrackers-backend || pm2 start npm --name sidducrackers-backend -- start
+
+            echo "===================================="
+            echo "Restarting Frontend..."
+            echo "===================================="
+
+            pm2 restart sidducrackers-frontend || pm2 start npm --name sidducrackers-frontend -- start
 
             pm2 save
 
-            echo "=================================="
-            echo "Deployment Successful!"
-            echo "=================================="
+            echo "===================================="
+            echo "Deployment Completed Successfully!"
+            echo "===================================="
