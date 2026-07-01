@@ -10,6 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 🔥 FIX 1: Force correct Node version in GitHub runner
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # SSH deploy step
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.2
         with:
@@ -33,14 +40,15 @@ jobs:
             echo "========== Building Frontend =========="
             cd frontend
 
-            # 🔥 FIX: clean broken dependencies
+            # 🔥 FIX 2: completely clean broken installs
             rm -rf node_modules package-lock.json
+            rm -rf ~/.npm
+
             npm cache clean --force
 
-            # install with native optional deps (fixes rolldown issue)
+            # install correct binaries (fixes rolldown/native deps)
             npm install --include=optional
 
-            # build
             npm run build
 
             echo "========== Installing Backend =========="
