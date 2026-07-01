@@ -1,0 +1,62 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+
+            PROJECT_DIR="/var/www/html/SidduCrackers"
+
+            echo "=================================="
+            echo "Starting Deployment..."
+            echo "=================================="
+
+            cd $PROJECT_DIR
+
+            echo "Pulling latest code..."
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "=================================="
+            echo "Building Frontend..."
+            echo "=================================="
+
+            cd frontend
+            npm install
+            npm run build
+
+            echo "=================================="
+            echo "Installing Backend..."
+            echo "=================================="
+
+            cd ../backend
+            npm install
+
+            echo "=================================="
+            echo "Restarting PM2..."
+            echo "=================================="
+
+            pm2 restart sidducrackers-backend
+            pm2 restart sidducrackers-frontend
+
+            pm2 save
+
+            echo "=================================="
+            echo "Deployment Successful!"
+            echo "=================================="
