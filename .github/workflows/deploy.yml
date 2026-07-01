@@ -26,22 +26,29 @@ jobs:
 
             cd $PROJECT_DIR
 
-            echo "Updating source..."
+            echo "Updating source code..."
             git fetch origin
             git reset --hard origin/main
 
-            echo "Building Frontend..."
+            echo "========== Building Frontend =========="
             cd frontend
-            npm install
+
+            # 🔥 FIX: clean broken dependencies
+            rm -rf node_modules package-lock.json
+            npm cache clean --force
+
+            # install with native optional deps (fixes rolldown issue)
+            npm install --include=optional
+
+            # build
             npm run build
 
-            echo "Installing Backend..."
+            echo "========== Installing Backend =========="
             cd ../backend
             npm install
 
-            echo "Restarting Backend..."
+            echo "========== Restarting Backend =========="
             pm2 restart siddu-backend
-
             pm2 save
 
             echo "========== Deployment Completed =========="
