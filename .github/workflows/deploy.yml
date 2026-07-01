@@ -10,51 +10,57 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
+      - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-
           script: |
             set -e
 
-            echo "========== Starting Deployment =========="
-
-            # 🔥 Load NVM properly (IMPORTANT FIX)
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
-            # Force Node 20
-            nvm use 20
-
-            echo "Node version check:"
-            node -v
-            which node
-
-            # Project path
             PROJECT_DIR="/var/www/html/SidduCrackers"
+
+            echo "========== Starting Deployment =========="
 
             cd $PROJECT_DIR
 
-            echo "Updating source..."
+            echo "Updating source code..."
             git fetch origin
             git reset --hard origin/main
 
-            echo "Building Frontend..."
+            echo "========== Loading NVM + Node =========="
+
+            # 🔥 IMPORTANT: load nvm in SSH shell
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            # use correct Node version
+            nvm use 22
+
+            echo "Node version:"
+            node -v
+
+            echo "========== Building Frontend =========="
             cd frontend
-            npm install
+
+            # clean everything broken
+            rm -rf node_modules package-lock.json
+            npm cache clean --force
+
+            # install fresh deps with native bindings
+            npm install --include=optional
+
+            # build
             npm run build
 
-            echo "Installing Backend..."
+            echo "========== Installing Backend =========="
             cd ../backend
             npm install
 
-            echo "Restarting Backend..."
-            pm2 restart siddu-backend || pm2 start index.js --name siddu-backend
-
+            echo "========== Restarting Backend =========="
+            pm2 restart siddu-backend
             pm2 save
 
             echo "========== Deployment Completed =========="
