@@ -10,57 +10,58 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to VPS
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+
           script: |
             set -e
 
-            PROJECT_DIR="/var/www/html/SidduCrackers"
-
             echo "========== Starting Deployment =========="
+
+            # 🔥 LOAD NVM (CRITICAL FIX)
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+            # Force Node 20
+            nvm use 20
+
+            echo "Node check:"
+            node -v
+            which node
+
+            PROJECT_DIR="/var/www/html/SidduCrackers"
 
             cd $PROJECT_DIR
 
-            echo "Updating source code..."
+            echo "Updating source..."
             git fetch origin
             git reset --hard origin/main
 
-            echo "========== Loading NVM + Node =========="
-
-            # 🔥 IMPORTANT: load nvm in SSH shell
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-            # use correct Node version
-            nvm use 22
-
-            echo "Node version:"
-            node -v
-
-            echo "========== Building Frontend =========="
+            echo "Building Frontend..."
             cd frontend
 
-            # clean everything broken
-            rm -rf node_modules package-lock.json
-            npm cache clean --force
+            # 🔥 re-load nvm again (safe for CI environments)
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            nvm use 20
 
-            # install fresh deps with native bindings
-            npm install --include=optional
+            node -v
 
-            # build
+            npm install
             npm run build
 
-            echo "========== Installing Backend =========="
+            echo "Installing Backend..."
             cd ../backend
             npm install
 
-            echo "========== Restarting Backend =========="
-            pm2 restart siddu-backend
+            echo "Restarting Backend..."
+            pm2 restart siddu-backend || pm2 start index.js --name siddu-backend
+
             pm2 save
 
             echo "========== Deployment Completed =========="
