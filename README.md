@@ -63,15 +63,6 @@ npm run dev
 
 App runs at `http://localhost:5173`
 
-## Default Admin Credentials
-
-Two admin accounts are seeded (passwords stored as bcrypt hashes in `admin_users`):
-
-| Email | Default password |
-|-------|------------------|
-| roganinnovater@gmail.com | Rogan@123 |
-| sidducrackers@gmail.com | Siddu@123 |
-
 > Change passwords after first login via **Admin → Settings → Admin Account**.
 
 For existing databases, run: `psql siddu_crackers < database/migration_v4.sql`
