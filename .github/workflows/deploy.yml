@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH
+      - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.HOST }}
@@ -23,14 +23,7 @@ jobs:
 
             echo "========== Starting Deployment =========="
 
-            # 🔥 LOAD NVM (CRITICAL FIX)
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
-            # Force Node 20
-            nvm use 20
-
-            echo "Node check:"
+            # 🔥 CHECK NODE (must be v20+ installed on VPS)
             node -v
             which node
 
@@ -45,18 +38,12 @@ jobs:
             echo "Building Frontend..."
             cd frontend
 
-            # 🔥 re-load nvm again (safe for CI environments)
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            nvm use 20
-
-            node -v
-
             npm install
             npm run build
 
             echo "Installing Backend..."
             cd ../backend
+
             npm install
 
             echo "Restarting Backend..."
