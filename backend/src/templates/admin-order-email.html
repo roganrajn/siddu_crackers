@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Order Received</title>
+</head>
+<body style="margin:0;padding:0;background:#FDF8F0;font-family:'Segoe UI',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FDF8F0;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(61,31,48,0.12);">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#7D3C5E 0%,#F04E8B 55%,#FFB81C 100%);padding:32px 28px;text-align:center;">
+              {{LOGO_HTML}}
+              <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">New Order Received</h1>
+              <p style="margin:12px 0 0;color:rgba(255,255,255,0.95);font-size:26px;font-weight:800;letter-spacing:1px;">{{ORDER_NUMBER}}</p>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">{{ORDER_DATE}}</p>
+            </td>
+          </tr>
+          <!-- Customer -->
+          <tr>
+            <td style="padding:28px;">
+              <h2 style="margin:0 0 16px;color:#7D3C5E;font-size:16px;border-bottom:3px solid #E8B84A;padding-bottom:8px;">Customer Details</h2>
+              <table role="presentation" width="100%" style="margin-bottom:28px;font-size:14px;">
+                <tr><td style="padding:8px 0;color:#6B5A62;width:130px;">Customer Name</td><td style="padding:8px 0;font-weight:600;color:#2A1520;">{{CUSTOMER_NAME}}</td></tr>
+                <tr><td style="padding:8px 0;color:#6B5A62;">Phone</td><td style="padding:8px 0;"><a href="tel:{{PHONE_RAW}}" style="color:#00A9B0;text-decoration:none;font-weight:600;">{{PHONE}}</a></td></tr>
+                <tr><td style="padding:8px 0;color:#6B5A62;">WhatsApp</td><td style="padding:8px 0;">{{WHATSAPP}}</td></tr>
+                {{EMAIL_ROW}}
+                <tr><td style="padding:8px 0;color:#6B5A62;vertical-align:top;">Address</td><td style="padding:8px 0;color:#2A1520;">{{ADDRESS}}<br>{{CITY}}, {{STATE}} - {{PINCODE}}</td></tr>
+                {{REMARKS_ROW}}
+              </table>
+
+              <h2 style="margin:0 0 16px;color:#7D3C5E;font-size:16px;border-bottom:3px solid #E8B84A;padding-bottom:8px;">Ordered Products</h2>
+              <table role="presentation" width="100%" style="border-collapse:collapse;margin-bottom:24px;font-size:14px;">
+                <thead>
+                  <tr style="background:#FDF8F0;">
+                    <th style="padding:12px;text-align:left;color:#7D3C5E;">Product</th>
+                    <th style="padding:12px;text-align:center;color:#7D3C5E;">Qty</th>
+                    <th style="padding:12px;text-align:right;color:#7D3C5E;">Price</th>
+                    <th style="padding:12px;text-align:right;color:#7D3C5E;">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>{{ITEMS_ROWS}}</tbody>
+              </table>
+
+              <div style="background:linear-gradient(135deg,#FDF8F0,#FFF5E8);border-radius:12px;padding:20px;text-align:right;border:1px solid rgba(232,184,74,0.3);">
+                <span style="font-size:14px;color:#6B5A62;">Grand Total</span>
+                <span style="font-size:32px;font-weight:800;color:#7D3C5E;margin-left:12px;">{{GRAND_TOTAL}}</span>
+              </div>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+                <tr>
+                  <td style="padding-right:8px;width:50%;">
+                    <a href="{{CALL_CUSTOMER_LINK}}" style="display:block;background:#00A9B0;color:#fff;text-align:center;padding:14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">📞 Call Customer</a>
+                  </td>
+                  <td style="padding-left:8px;width:50%;">
+                    <a href="{{WHATSAPP_CUSTOMER_LINK}}" style="display:block;background:#25D366;color:#fff;text-align:center;padding:14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">💬 WhatsApp Customer</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#3D1A2E;padding:20px 28px;text-align:center;">
+              <p style="margin:0;color:rgba(255,255,255,0.8);font-size:13px;">{{COMPANY_NAME}} · Direct from Sivakasi</p>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.5);font-size:12px;">{{ORDER_DATE}}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
