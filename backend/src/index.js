@@ -71,21 +71,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, async () => {
-  console.log(`🎆 Siddu Crackers API running on port ${PORT}`);
+async function startServer() {
   try {
     await ensureSchema();
   } catch (e) {
     console.error('[db] Schema ensure failed:', e.message);
   }
-  verifySmtpConnection();
-  if (isS3Configured()) {
-    listS3Objects({ maxKeys: 1 })
-      .then((r) => console.log(`[s3] Connected — bucket: ${r.bucket}, folder: ${r.rootFolder}/`))
-      .catch((e) => console.error('[s3] Connection failed:', e.message));
-  } else {
-    console.warn('[s3] Not configured — image uploads will fail');
-  }
-});
+
+  app.listen(PORT, () => {
+    console.log(`🎆 Siddu Crackers API running on port ${PORT}`);
+    verifySmtpConnection();
+    if (isS3Configured()) {
+      listS3Objects({ maxKeys: 1 })
+        .then((r) => console.log(`[s3] Connected — bucket: ${r.bucket}, folder: ${r.rootFolder}/`))
+        .catch((e) => console.error('[s3] Connection failed:', e.message));
+    } else {
+      console.warn('[s3] Not configured — image uploads will fail');
+    }
+  });
+}
+
+startServer();
 
 export default app;

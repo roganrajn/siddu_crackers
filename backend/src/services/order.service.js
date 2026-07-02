@@ -231,9 +231,9 @@ export async function updateOrderStatus(orderId, status, note = null) {
 
     const result = await client.query(
       `UPDATE orders SET
-        status = $1,
+        status = $1::varchar,
         payment_method = CASE
-          WHEN $1 = 'confirmed' THEN COALESCE(payment_method, 'not_received')
+          WHEN $1::varchar = 'confirmed' THEN COALESCE(payment_method, 'not_received')
           ELSE payment_method
         END,
         updated_at = CURRENT_TIMESTAMP

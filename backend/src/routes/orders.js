@@ -187,7 +187,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
     if (error.status === 404) return res.status(404).json({ error: error.message });
-    console.error('Update order status error:', error.message);
+    console.error('Update order status error:', error.message, error.code || '');
     res.status(500).json({ error: 'Server error' });
   }
 });
