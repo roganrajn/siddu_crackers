@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS orders (
   remarks TEXT,
   total_amount DECIMAL(10, 2) NOT NULL,
   status VARCHAR(50) DEFAULT 'new',
+  payment_method VARCHAR(50) DEFAULT 'not_received',
+  payment_transaction_id VARCHAR(255),
+  payment_remarks TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

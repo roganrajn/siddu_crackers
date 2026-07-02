@@ -189,8 +189,18 @@ router.post('/', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }, 
       is_featured, is_best_seller, is_visible, sort_order, category_ids, tags,
     } = req.body;
 
+    if (!name?.trim()) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Product name is required' });
+    }
+    if (original_price == null || original_price === '' || offer_price == null || offer_price === '') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Original price and offer price are required' });
+    }
+
     const slug = slugify(name);
     const discount = calculateDiscount(parseFloat(original_price), parseFloat(offer_price));
+    const skuValue = sku?.trim() || null;
     let image_url = null;
     const parsedTags = tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : [];
 
@@ -201,7 +211,7 @@ router.post('/', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }, 
     const result = await client.query(
       `INSERT INTO products (name, slug, description, original_price, offer_price, discount_percentage, image_url, sku, tags, is_featured, is_best_seller, is_visible, sort_order)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
-      [name, slug, description, original_price, offer_price, discount, image_url, sku,
+      [name.trim(), slug, description, original_price, offer_price, discount, image_url, skuValue,
        parsedTags, is_featured === 'true', is_best_seller === 'true', is_visible !== 'false', sort_order || 0]
     );
 
@@ -232,7 +242,10 @@ router.post('/', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }, 
     res.status(201).json(withImages);
   } catch (error) {
     await client.query('ROLLBACK');
-    if (error.code === '23505') return res.status(400).json({ error: 'Product SKU or slug already exists' });
+    if (error.code === '23505') {
+      const field = error.detail?.includes('sku') ? 'SKU' : 'product name';
+      return res.status(400).json({ error: `A product with this ${field} already exists` });
+    }
     console.error('Create product error:', error);
     res.status(500).json({ error: 'Server error' });
   } finally {
@@ -256,6 +269,7 @@ router.put('/:id', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }
       : undefined;
     let image_url = req.body.image_url;
     const parsedTags = tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : undefined;
+    const skuValue = sku !== undefined ? (sku?.trim() || null) : undefined;
 
     if (req.files?.image?.[0]) {
       image_url = await uploadToS3(req.files.image[0], 'products');
@@ -277,7 +291,7 @@ router.put('/:id', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }
         price_updated_at = CASE WHEN $4 IS NOT NULL OR $5 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE price_updated_at END,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $14 RETURNING *`,
-      [name, slug, description, original_price, offer_price, discount, image_url, sku,
+      [name, slug, description, original_price, offer_price, discount, image_url, skuValue,
        parsedTags, is_featured, is_best_seller, is_visible, sort_order, req.params.id]
     );
 

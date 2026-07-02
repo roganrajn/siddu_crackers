@@ -129,9 +129,8 @@ async function handleTrack() {
   background: #dbeafe;
   color: #2563eb;
 
-  &.completed { background: #d1fae5; color: #059669; }
+  &.confirmed { background: #d1fae5; color: #059669; }
   &.cancelled { background: #fee2e2; color: #dc2626; }
-  &.confirmed, &.packed { background: #d1fae5; color: #059669; }
 }
 
 .result-details {

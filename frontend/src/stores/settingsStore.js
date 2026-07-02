@@ -33,9 +33,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function updateSettings(formData) {
-    const { data } = await api.put('/settings', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const { data } = await api.put('/settings', formData);
     settings.value = { ...settings.value, ...data };
     return data;
   }

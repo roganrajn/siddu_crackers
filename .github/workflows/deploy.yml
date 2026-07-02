@@ -49,6 +49,17 @@ jobs:
             echo "Restarting Backend..."
             pm2 restart siddu-backend || pm2 start index.js --name siddu-backend
 
+            echo "Updating Nginx upload limit..."
+            NGINX_CONF="/etc/nginx/nginx.conf"
+            if [ -f "$NGINX_CONF" ]; then
+              if grep -q "client_max_body_size" "$NGINX_CONF"; then
+                sudo sed -i 's/client_max_body_size[^;]*;/client_max_body_size 12M;/' "$NGINX_CONF"
+              else
+                sudo sed -i '/^http {/a \    client_max_body_size 12M;' "$NGINX_CONF"
+              fi
+              sudo nginx -t && sudo systemctl reload nginx
+            fi
+
             pm2 save
 
             echo "========== Deployment Completed =========="

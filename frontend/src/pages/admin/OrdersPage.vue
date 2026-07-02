@@ -5,16 +5,23 @@
         Orders
         <span v-if="newOrderCount" class="new-badge">{{ newOrderCount }} new</span>
       </h2>
-      <button class="btn btn--sm btn--secondary" @click="orderStore.exportCSV()">Export CSV</button>
+      <button class="btn btn--sm btn--secondary" @click="exportOrders">Export CSV</button>
     </div>
 
     <div class="filters">
       <input v-model="search" placeholder="Search orders..." @input="debouncedSearch" />
-      <select v-model="statusFilter" @change="loadOrders">
+      <select v-model="statusFilter" @change="onFilterChange">
         <option value="">All Status</option>
         <option v-for="s in ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
     </div>
+
+    <DateRangeFilter
+      v-model:date-preset="datePreset"
+      v-model:custom-date-from="customDateFrom"
+      v-model:custom-date-to="customDateTo"
+      @change="onDateFilterChange"
+    />
 
     <table class="admin-table">
       <thead>
@@ -69,6 +76,8 @@ import { useRouter } from 'vue-router';
 import { useOrderStore } from '@/stores/orderStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP } from '@/constants';
 import { formatPrice, debounce } from '@/utils/helpers';
+import { useDateRangeFilter } from '@/composables/useDateRangeFilter';
+import DateRangeFilter from '@/components/admin/DateRangeFilter.vue';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -85,6 +94,16 @@ const lastPollTime = ref(new Date().toISOString());
 
 let pollTimer = null;
 
+const {
+  datePreset,
+  customDateFrom,
+  customDateTo,
+  getDateRangeParams,
+} = useDateRangeFilter(() => {
+  page.value = 1;
+  loadOrders();
+});
+
 const debouncedSearch = debounce(() => { page.value = 1; loadOrders(); }, 300);
 
 function normalizeStatus(status) {
@@ -94,6 +113,31 @@ function normalizeStatus(status) {
 function getStatusColor(status) {
   const normalized = normalizeStatus(status);
   return ORDER_STATUSES.find((s) => s.value === normalized)?.color || '#ccc';
+}
+
+function getOrderQueryParams() {
+  return {
+    page: page.value,
+    limit: 10,
+    status: statusFilter.value || undefined,
+    search: search.value || undefined,
+    ...getDateRangeParams(),
+  };
+}
+
+function onFilterChange() {
+  page.value = 1;
+  loadOrders();
+}
+
+function onDateFilterChange() {
+  page.value = 1;
+  loadOrders();
+}
+
+function exportOrders() {
+  const { page: _p, limit: _l, ...exportParams } = getOrderQueryParams();
+  orderStore.exportCSV(exportParams);
 }
 
 function formatDate(date) {
@@ -106,12 +150,7 @@ function formatDate(date) {
 async function loadOrders() {
   loading.value = true;
   try {
-    const data = await orderStore.fetchOrders({
-      page: page.value,
-      limit: 10,
-      status: statusFilter.value || undefined,
-      search: search.value || undefined,
-    });
+    const data = await orderStore.fetchOrders(getOrderQueryParams());
     orders.value = data.orders;
     totalPages.value = data.totalPages;
     lastPollTime.value = new Date().toISOString();
@@ -121,7 +160,7 @@ async function loadOrders() {
 }
 
 async function pollForNewOrders() {
-  if (page.value !== 1 || statusFilter.value) return;
+  if (page.value !== 1 || statusFilter.value || datePreset.value) return;
 
   try {
     const newOrders = await orderStore.pollNewOrders(lastPollTime.value);
@@ -187,8 +226,9 @@ onUnmounted(() => {
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 
   input, select {
     padding: 10px 16px;
@@ -196,7 +236,7 @@ onUnmounted(() => {
     border-radius: $radius-sm;
   }
 
-  input { flex: 1; max-width: 400px; }
+  input { flex: 1; max-width: 400px; min-width: 180px; }
 }
 
 .status-select {

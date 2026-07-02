@@ -42,6 +42,57 @@
       </div>
     </div>
 
+    <div v-if="isConfirmed" class="detail-card payment-card no-print">
+      <h3>Payment</h3>
+      <p class="payment-status">
+        <strong>Current:</strong>
+        <span :class="['payment-badge', effectivePaymentMethod]">{{ paymentStatusLabel }}</span>
+      </p>
+
+      <div class="payment-form">
+        <div class="form-group">
+          <label>Payment Method</label>
+          <select v-model="paymentForm.payment_method">
+            <option v-for="m in PAYMENT_METHODS" :key="m.value" :value="m.value">{{ m.label }}</option>
+          </select>
+        </div>
+
+        <template v-if="needsTransactionDetails">
+          <div class="form-group">
+            <label>Transaction ID</label>
+            <input
+              v-model="paymentForm.payment_transaction_id"
+              placeholder="Enter UPI / bank transaction ID"
+            />
+          </div>
+          <div class="form-group">
+            <label>Remarks</label>
+            <input
+              v-model="paymentForm.payment_remarks"
+              placeholder="Payment notes (optional)"
+            />
+          </div>
+          <p v-if="!paymentForm.payment_transaction_id?.trim()" class="payment-hint">
+            Without a Transaction ID, payment will be saved as "Payment not received yet".
+          </p>
+        </template>
+
+        <div class="payment-actions">
+          <button type="button" class="btn btn--sm" :disabled="savingPayment" @click="savePayment">
+            {{ savingPayment ? 'Saving...' : 'Save Payment' }}
+          </button>
+        </div>
+        <p v-if="paymentError" class="payment-error">{{ paymentError }}</p>
+      </div>
+    </div>
+
+    <div v-if="isConfirmed" class="detail-card payment-card print-only">
+      <h3>Payment</h3>
+      <p><strong>Status:</strong> {{ paymentStatusLabel }}</p>
+      <p v-if="order.payment_transaction_id"><strong>Transaction ID:</strong> {{ order.payment_transaction_id }}</p>
+      <p v-if="order.payment_remarks"><strong>Remarks:</strong> {{ order.payment_remarks }}</p>
+    </div>
+
     <div class="detail-card items-card">
       <h3>Order Items</h3>
       <table class="admin-table items-table">
@@ -71,17 +122,35 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useOrderStore } from '@/stores/orderStore';
-import { ORDER_STATUSES, LEGACY_STATUS_MAP } from '@/constants';
+import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getEffectivePaymentMethod, getPaymentMethodLabel } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
 
 const route = useRoute();
 const orderStore = useOrderStore();
 const order = ref(null);
 const items = ref([]);
+const savingPayment = ref(false);
+const paymentError = ref('');
+
+const paymentForm = ref({
+  payment_method: 'not_received',
+  payment_transaction_id: '',
+  payment_remarks: '',
+});
 
 const displayStatus = computed(() =>
   order.value ? (LEGACY_STATUS_MAP[order.value.status] || order.value.status) : 'new'
 );
+
+const isConfirmed = computed(() => displayStatus.value === 'confirmed');
+
+const needsTransactionDetails = computed(() =>
+  ['upi', 'bank_transfer'].includes(paymentForm.value.payment_method)
+);
+
+const effectivePaymentMethod = computed(() => getEffectivePaymentMethod(order.value));
+
+const paymentStatusLabel = computed(() => getPaymentMethodLabel(order.value));
 
 const statusLabel = computed(() =>
   ORDER_STATUSES.find((s) => s.value === displayStatus.value)?.label || displayStatus.value
@@ -100,6 +169,7 @@ onMounted(async () => {
   const data = await orderStore.fetchOrder(route.params.id);
   order.value = data.order;
   items.value = data.items;
+  syncPaymentForm();
 
   if (route.query.print) {
     await nextTick();
@@ -107,13 +177,44 @@ onMounted(async () => {
   }
 });
 
+function syncPaymentForm() {
+  if (!order.value) return;
+  paymentForm.value = {
+    payment_method: order.value.payment_method || 'not_received',
+    payment_transaction_id: order.value.payment_transaction_id || '',
+    payment_remarks: order.value.payment_remarks || '',
+  };
+}
+
 function handlePrint() {
   window.print();
 }
 
 async function updateStatus(status) {
-  await orderStore.updateStatus(order.value.id, status);
-  order.value.status = status;
+  paymentError.value = '';
+  const updated = await orderStore.updateStatus(order.value.id, status);
+  order.value = { ...order.value, ...updated };
+  if ((LEGACY_STATUS_MAP[updated.status] || updated.status) === 'confirmed') {
+    syncPaymentForm();
+  }
+}
+
+async function savePayment() {
+  savingPayment.value = true;
+  paymentError.value = '';
+  try {
+    const updated = await orderStore.updatePayment(order.value.id, {
+      payment_method: paymentForm.value.payment_method,
+      payment_transaction_id: paymentForm.value.payment_transaction_id,
+      payment_remarks: paymentForm.value.payment_remarks,
+    });
+    order.value = { ...order.value, ...updated };
+    syncPaymentForm();
+  } catch (e) {
+    paymentError.value = e.response?.data?.error || 'Failed to save payment';
+  } finally {
+    savingPayment.value = false;
+  }
 }
 </script>
 
@@ -141,6 +242,68 @@ async function updateStatus(status) {
 
 .items-card {
   margin-top: 20px;
+}
+
+.payment-card {
+  margin-top: 20px;
+}
+
+.payment-status {
+  margin-bottom: 16px;
+}
+
+.payment-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 8px;
+
+  &.not_received { background: #fef3c7; color: #d97706; }
+  &.upi, &.bank_transfer { background: #d1fae5; color: #059669; }
+  &.cash { background: #dbeafe; color: #2563eb; }
+}
+
+.payment-form {
+  display: grid;
+  gap: 14px;
+  max-width: 480px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: $text-dark;
+  }
+
+  input, select {
+    padding: 10px 12px;
+    border: 2px solid $border;
+    border-radius: $radius-sm;
+    font: inherit;
+  }
+}
+
+.payment-hint {
+  font-size: 0.82rem;
+  color: $text-muted;
+  margin: 0;
+}
+
+.payment-actions {
+  margin-top: 4px;
+}
+
+.payment-error {
+  color: #ef4444;
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .status-row {

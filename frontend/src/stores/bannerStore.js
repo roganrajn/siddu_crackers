@@ -17,13 +17,13 @@ export const useBannerStore = defineStore('banner', () => {
   }
 
   async function createBanner(formData) {
-    const { data } = await api.post('/banners', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    const { data } = await api.post('/banners', formData);
     banners.value.push(data);
     return data;
   }
 
   async function updateBanner(id, formData) {
-    const { data } = await api.put(`/banners/${id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    const { data } = await api.put(`/banners/${id}`, formData);
     const idx = banners.value.findIndex(b => b.id === id);
     if (idx !== -1) banners.value[idx] = data;
     return data;

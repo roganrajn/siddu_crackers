@@ -48,9 +48,7 @@
   font-weight: 600;
 
   &.new { background: #dbeafe; color: #2563eb; }
-  &.contacted { background: #fef3c7; color: #d97706; }
   &.confirmed { background: #d1fae5; color: #059669; }
-  &.completed { background: #e5e7eb; color: #374151; }
   &.cancelled { background: #fee2e2; color: #dc2626; }
 }
 
@@ -111,6 +109,57 @@
     &.active, &:hover { background: $primary; color: $white; border-color: $primary; }
     &:disabled { opacity: 0.5; cursor: not-allowed; }
   }
+}
+
+.date-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.date-pill {
+  padding: 8px 14px;
+  border: 2px solid $border;
+  border-radius: 20px;
+  background: $white;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: $text-dark;
+  cursor: pointer;
+  transition: $transition;
+
+  &:hover {
+    border-color: $primary;
+    color: $primary;
+  }
+
+  &.active {
+    background: $primary;
+    border-color: $primary;
+    color: $white;
+  }
+}
+
+.custom-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  input[type='date'] {
+    padding: 8px 12px;
+    border: 2px solid $border;
+    border-radius: $radius-sm;
+    font: inherit;
+    font-size: 0.85rem;
+  }
+}
+
+.range-sep {
+  font-size: 0.85rem;
+  color: $text-muted;
 }
 
 @media (max-width: 768px) {

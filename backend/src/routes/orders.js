@@ -4,11 +4,44 @@ import { authMiddleware } from '../middleware/auth.js';
 import {
   createOrder,
   updateOrderStatus,
+  updateOrderPayment,
   CUSTOMER_STATUS_MAP,
   normalizeStatus,
 } from '../services/order.service.js';
 
 const router = express.Router();
+
+function buildOrderFilters(query) {
+  const { status, search, since, date_from, date_to } = query;
+  const where = [];
+  const params = [];
+  let paramIndex = 1;
+
+  if (status) {
+    where.push(`status = $${paramIndex++}`);
+    params.push(status);
+  }
+  if (search) {
+    where.push(`(order_number ILIKE $${paramIndex} OR customer_name ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
+    params.push(`%${search}%`);
+    paramIndex++;
+  }
+  if (since) {
+    where.push(`created_at > $${paramIndex++}`);
+    params.push(new Date(since).toISOString());
+  }
+  if (date_from) {
+    where.push(`created_at >= $${paramIndex++}::date`);
+    params.push(date_from);
+  }
+  if (date_to) {
+    where.push(`created_at < ($${paramIndex++}::date + INTERVAL '1 day')`);
+    params.push(date_to);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  return { whereClause, params, paramIndex };
+}
 
 router.post('/', async (req, res) => {
   try {
@@ -78,7 +111,11 @@ router.post('/track', async (req, res) => {
 
 router.get('/export/csv', authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+    const { whereClause, params } = buildOrderFilters(req.query);
+    const result = await pool.query(
+      `SELECT * FROM orders ${whereClause} ORDER BY created_at DESC`,
+      params
+    );
     const headers = 'Order Number,Customer Name,Phone,WhatsApp,Email,State,City,Address,Pincode,Total,Status,Date\n';
     const rows = result.rows.map((o) =>
       `"${o.order_number}","${o.customer_name}","${o.phone}","${o.whatsapp || ''}","${o.email || ''}","${o.state}","${o.city}","${o.address.replace(/"/g, '""')}","${o.pincode}",${o.total_amount},"${o.status}","${new Date(o.created_at).toLocaleString('en-IN')}"`
@@ -93,26 +130,8 @@ router.get('/export/csv', authMiddleware, async (req, res) => {
 
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const { status, page = 1, limit = 10, search, since } = req.query;
-    const where = [];
-    const params = [];
-    let paramIndex = 1;
-
-    if (status) {
-      where.push(`status = $${paramIndex++}`);
-      params.push(status);
-    }
-    if (search) {
-      where.push(`(order_number ILIKE $${paramIndex} OR customer_name ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
-      params.push(`%${search}%`);
-      paramIndex++;
-    }
-    if (since) {
-      where.push(`created_at > $${paramIndex++}`);
-      params.push(new Date(since).toISOString());
-    }
-
-    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const { page = 1, limit = 10 } = req.query;
+    const { whereClause, params, paramIndex } = buildOrderFilters(req.query);
     const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
     const countResult = await pool.query(`SELECT COUNT(*) FROM orders ${whereClause}`, params);
@@ -144,6 +163,17 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
     res.json({ order: orderResult.rows[0], items: itemsResult.rows, logs: logsResult.rows });
   } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/:id/payment', authMiddleware, async (req, res) => {
+  try {
+    const order = await updateOrderPayment(req.params.id, req.body);
+    res.json(order);
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    if (error.status === 404) return res.status(404).json({ error: error.message });
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -17,8 +17,6 @@
       </div>
     </section>
 
-    <BestSellers />
-
     <StickyCategoryBar
       :categories="categoriesWithProducts"
       :active-slug="activeCategory"
@@ -50,6 +48,8 @@
         </template>
       </div>
     </section>
+
+    <BestSellers />
 
     <WhyUs />
     <ReviewsSection />
@@ -187,7 +187,7 @@ onUnmounted(() => window.removeEventListener('scroll', handlePageScroll));
 }
 
 .products-section {
-  padding: 32px 0 0;
+  padding: 32px 0 48px;
 }
 .loading-grid {
   display: grid;

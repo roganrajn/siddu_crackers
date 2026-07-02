@@ -125,7 +125,7 @@
               </div>
               <div class="form-group image-upload-field">
                 <input type="file" accept="image/*" @change="onFileChange" />
-                <p class="field-hint">Upload a new image to replace the current one on save.</p>
+                <p class="field-hint">JPEG, PNG, or WebP up to 10 MB.</p>
               </div>
             </div>
           </section>
@@ -140,6 +140,7 @@
             <button type="button" class="btn btn--outline btn--sm" @click="showModal = false">Cancel</button>
             <button type="submit" class="btn btn--sm" :disabled="saving">{{ saving ? 'Saving...' : 'Save' }}</button>
           </div>
+          <p v-if="saveError" class="save-error">{{ saveError }}</p>
         </form>
       </div>
     </div>
@@ -164,6 +165,7 @@ const totalPages = ref(1);
 const totalCount = ref(0);
 const loading = ref(false);
 const saving = ref(false);
+const saveError = ref('');
 const showModal = ref(false);
 const editing = ref(null);
 const imageFile = ref(null);
@@ -229,6 +231,7 @@ function openModal(product = null) {
     imagePreview.value = null;
   }
   imageFile.value = null;
+  saveError.value = '';
   showModal.value = true;
 }
 
@@ -242,11 +245,19 @@ function onFileChange(e) {
 
 async function handleSave() {
   saving.value = true;
+  saveError.value = '';
   try {
     const fd = new FormData();
     Object.entries(form.value).forEach(([key, val]) => {
-      if (key === 'category_ids') fd.append(key, JSON.stringify(val));
-      else fd.append(key, val);
+      if (key === 'category_ids') {
+        fd.append(key, JSON.stringify(val));
+      } else if (key === 'sku' && !String(val || '').trim()) {
+        // Skip empty SKU — empty string violates UNIQUE constraint
+      } else if (typeof val === 'boolean') {
+        fd.append(key, val ? 'true' : 'false');
+      } else {
+        fd.append(key, val);
+      }
     });
     if (imageFile.value) fd.append('image', imageFile.value);
 
@@ -254,6 +265,8 @@ async function handleSave() {
     else await productStore.createProduct(fd);
     showModal.value = false;
     await loadProducts();
+  } catch (e) {
+    saveError.value = e.response?.data?.error || 'Failed to save product. Please try again.';
   } finally {
     saving.value = false;
   }
@@ -415,6 +428,13 @@ async function handleDelete(product) {
   font-size: 0.8rem;
   color: $text-muted;
   margin-top: 6px;
+}
+
+.save-error {
+  color: #ef4444;
+  font-size: 0.9rem;
+  margin-top: 12px;
+  text-align: center;
 }
 
 @media (max-width: 640px) {

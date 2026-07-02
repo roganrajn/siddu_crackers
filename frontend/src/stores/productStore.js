@@ -27,17 +27,13 @@ export const useProductStore = defineStore('product', () => {
   }
 
   async function createProduct(formData) {
-    const { data } = await api.post('/products', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const { data } = await api.post('/products', formData);
     products.value.push(data);
     return data;
   }
 
   async function updateProduct(id, formData) {
-    const { data } = await api.put(`/products/${id}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const { data } = await api.put(`/products/${id}`, formData);
     const idx = products.value.findIndex(p => p.id === id);
     if (idx !== -1) products.value[idx] = data;
     return data;

@@ -10,24 +10,47 @@ export const PRODUCT_TAGS = [
 
 export const ORDER_STATUSES = [
   { value: 'new', label: 'New', customerLabel: 'Received', color: '#2563eb' },
-  { value: 'contacted', label: 'Contacted', customerLabel: 'Processing', color: '#d97706' },
   { value: 'confirmed', label: 'Confirmed', customerLabel: 'Confirmed', color: '#059669' },
-  { value: 'packed', label: 'Packed', customerLabel: 'Packed', color: '#7c3aed' },
-  { value: 'completed', label: 'Completed', customerLabel: 'Completed', color: '#374151' },
   { value: 'cancelled', label: 'Cancelled', customerLabel: 'Cancelled', color: '#dc2626' },
+];
+
+export const PAYMENT_METHODS = [
+  { value: 'not_received', label: 'Payment not received yet' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'cash', label: 'Cash' },
 ];
 
 // Legacy status mapping (backward compatibility)
 export const LEGACY_STATUS_MAP = {
-  called_customer: 'contacted',
-  waiting_confirmation: 'contacted',
-  contacted: 'contacted',
+  called_customer: 'new',
+  waiting_confirmation: 'new',
+  contacted: 'new',
+  packed: 'confirmed',
+  completed: 'confirmed',
   confirmed: 'confirmed',
-  completed: 'completed',
   cancelled: 'cancelled',
   new: 'new',
-  packed: 'packed',
 };
+
+export function normalizeOrderStatus(status) {
+  return LEGACY_STATUS_MAP[status] || status;
+}
+
+export function getEffectivePaymentMethod(order) {
+  if (!order) return 'not_received';
+  const method = order.payment_method || 'not_received';
+  const txnId = order.payment_transaction_id?.trim();
+  if ((method === 'upi' || method === 'bank_transfer') && !txnId) {
+    return 'not_received';
+  }
+  return method;
+}
+
+export function getPaymentMethodLabel(order) {
+  const effective = getEffectivePaymentMethod(order);
+  return PAYMENT_METHODS.find((m) => m.value === effective)?.label || 'Payment not received yet';
+}
 
 export const CATEGORY_ICONS = {
   'lakshmi-crackers': '🪔',

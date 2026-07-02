@@ -17,17 +17,13 @@ export const useCategoryStore = defineStore('category', () => {
   }
 
   async function createCategory(formData) {
-    const { data } = await api.post('/categories', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const { data } = await api.post('/categories', formData);
     categories.value.push(data);
     return data;
   }
 
   async function updateCategory(id, formData) {
-    const { data } = await api.put(`/categories/${id}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const { data } = await api.put(`/categories/${id}`, formData);
     const idx = categories.value.findIndex(c => c.id === id);
     if (idx !== -1) categories.value[idx] = data;
     return data;

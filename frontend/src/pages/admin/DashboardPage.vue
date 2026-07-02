@@ -1,9 +1,16 @@
 <template>
   <div class="dashboard">
+    <DateRangeFilter
+      v-model:date-preset="datePreset"
+      v-model:custom-date-from="customDateFrom"
+      v-model:custom-date-to="customDateTo"
+      @change="loadStats"
+    />
+
     <div class="stats-grid">
       <div class="stat-card stat-card--primary">
         <span class="stat-icon">📦</span>
-        <div><strong>{{ stats.ordersToday }}</strong><span>Orders Today</span></div>
+        <div><strong>{{ stats.ordersToday }}</strong><span>{{ ordersLabel }}</span></div>
       </div>
       <div class="stat-card stat-card--warning">
         <span class="stat-icon">⏳</span>
@@ -11,7 +18,7 @@
       </div>
       <div class="stat-card stat-card--success">
         <span class="stat-icon">✅</span>
-        <div><strong>{{ stats.completedOrders }}</strong><span>Completed</span></div>
+        <div><strong>{{ stats.completedOrders }}</strong><span>Confirmed</span></div>
       </div>
       <div class="stat-card stat-card--revenue">
         <span class="stat-icon">💰</span>
@@ -29,7 +36,7 @@
 
     <div class="charts-row">
       <div class="chart-card">
-        <h3>Orders (Last 7 Days)</h3>
+        <h3>{{ chartTitle }}</h3>
         <div class="bar-chart">
           <div v-for="day in chartData" :key="day.date" class="bar-col">
             <div class="bar" :style="{ height: barHeight(day.orders) + '%' }">
@@ -79,10 +86,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '@/services/api';
 import { formatPrice } from '@/utils/helpers';
 import { ORDER_STATUSES } from '@/constants';
+import { useDateRangeFilter } from '@/composables/useDateRangeFilter';
+import DateRangeFilter from '@/components/admin/DateRangeFilter.vue';
 
 const stats = ref({
   ordersToday: 0, pendingOrders: 0, completedOrders: 0, totalRevenue: 0,
@@ -90,13 +99,39 @@ const stats = ref({
 });
 const chartData = ref([]);
 const maxOrders = ref(1);
+const hasDateFilter = ref(false);
 
-onMounted(async () => {
-  const { data } = await api.get('/dashboard/stats');
+const {
+  datePreset,
+  customDateFrom,
+  customDateTo,
+  getDateRangeParams,
+} = useDateRangeFilter(loadStats);
+
+const ordersLabel = computed(() => {
+  switch (datePreset.value) {
+    case 'today': return 'Orders Today';
+    case 'last7': return 'Orders (7 Days)';
+    case 'month': return 'Orders (This Month)';
+    case 'custom': return 'Orders in Range';
+    default: return 'Orders Today';
+  }
+});
+
+const chartTitle = computed(() => {
+  if (hasDateFilter.value) return 'Orders by Day';
+  return 'Orders (Last 7 Days)';
+});
+
+onMounted(loadStats);
+
+async function loadStats() {
+  const { data } = await api.get('/dashboard/stats', { params: getDateRangeParams() });
   stats.value = data;
   chartData.value = data.chartData || [];
-  maxOrders.value = Math.max(...chartData.value.map(d => parseInt(d.orders)), 1);
-});
+  hasDateFilter.value = Boolean(data.hasDateFilter);
+  maxOrders.value = Math.max(...chartData.value.map(d => parseInt(d.orders, 10)), 1);
+}
 
 function barHeight(orders) {
   return Math.max((parseInt(orders) / maxOrders.value) * 100, 4);
@@ -245,9 +280,7 @@ function statusPercent(count) {
   font-size: 0.7rem;
   font-weight: 600;
   &.new { background: #dbeafe; color: #2563eb; }
-  &.contacted, &.called_customer, &.waiting_confirmation { background: #fef3c7; color: #d97706; }
-  &.confirmed, &.packed { background: #d1fae5; color: #059669; }
-  &.completed { background: #e5e7eb; color: #374151; }
+  &.confirmed { background: #d1fae5; color: #059669; }
   &.cancelled { background: #fee2e2; color: #dc2626; }
 }
 

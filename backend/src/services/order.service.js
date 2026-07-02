@@ -1,28 +1,57 @@
 import pool from '../config/db.js';
 import { sendOrderEmails } from './email.service.js';
 
-const VALID_STATUSES = ['new', 'contacted', 'confirmed', 'packed', 'completed', 'cancelled'];
+const VALID_STATUSES = ['new', 'confirmed', 'cancelled'];
 
-// Map legacy statuses for backward compatibility
 const LEGACY_STATUS_ALIASES = {
-  called_customer: 'contacted',
-  waiting_confirmation: 'contacted',
+  called_customer: 'new',
+  waiting_confirmation: 'new',
+  contacted: 'new',
+  packed: 'confirmed',
+  completed: 'confirmed',
 };
+
+const VALID_PAYMENT_METHODS = ['not_received', 'upi', 'bank_transfer', 'cash'];
 
 export const CUSTOMER_STATUS_MAP = {
   new: 'Received',
-  contacted: 'Processing',
   confirmed: 'Confirmed',
-  packed: 'Packed',
-  completed: 'Completed',
   cancelled: 'Cancelled',
-  // Legacy
-  called_customer: 'Processing',
-  waiting_confirmation: 'Processing',
+  contacted: 'Received',
+  called_customer: 'Received',
+  waiting_confirmation: 'Received',
+  packed: 'Confirmed',
+  completed: 'Confirmed',
 };
 
 export function normalizeStatus(status) {
   return LEGACY_STATUS_ALIASES[status] || status;
+}
+
+export function resolvePaymentFields({ payment_method, payment_transaction_id, payment_remarks }) {
+  let method = payment_method || 'not_received';
+  let transactionId = payment_transaction_id?.trim() || null;
+  let remarks = payment_remarks?.trim() || null;
+
+  if (method === 'upi' || method === 'bank_transfer') {
+    if (!transactionId) {
+      method = 'not_received';
+      transactionId = null;
+      remarks = null;
+    }
+  } else if (method === 'cash') {
+    transactionId = null;
+  } else {
+    method = 'not_received';
+    transactionId = null;
+    remarks = null;
+  }
+
+  return {
+    payment_method: method,
+    payment_transaction_id: transactionId,
+    payment_remarks: remarks,
+  };
 }
 
 /**
@@ -194,7 +223,11 @@ export async function updateOrderStatus(orderId, status, note = null) {
     await client.query('BEGIN');
 
     const result = await client.query(
-      'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      `UPDATE orders SET
+        status = $1,
+        payment_method = CASE WHEN $1 = 'confirmed' THEN COALESCE(payment_method, 'not_received') ELSE payment_method END,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 RETURNING *`,
       [normalized, orderId]
     );
 
@@ -216,4 +249,57 @@ export async function updateOrderStatus(orderId, status, note = null) {
   }
 }
 
-export { VALID_STATUSES };
+export async function updateOrderPayment(orderId, paymentData) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    if (!existing.rows[0]) {
+      const err = new Error('Order not found');
+      err.status = 404;
+      throw err;
+    }
+
+    const order = existing.rows[0];
+    const normalizedStatus = normalizeStatus(order.status);
+    if (normalizedStatus !== 'confirmed') {
+      const err = new Error('Payment can only be updated for confirmed orders');
+      err.status = 400;
+      throw err;
+    }
+
+    const method = paymentData.payment_method;
+    if (method && !VALID_PAYMENT_METHODS.includes(method)) {
+      const err = new Error('Invalid payment method');
+      err.status = 400;
+      throw err;
+    }
+
+    const payment = resolvePaymentFields({
+      payment_method: method || order.payment_method,
+      payment_transaction_id: paymentData.payment_transaction_id ?? order.payment_transaction_id,
+      payment_remarks: paymentData.payment_remarks ?? order.payment_remarks,
+    });
+
+    const result = await client.query(
+      `UPDATE orders SET
+        payment_method = $1,
+        payment_transaction_id = $2,
+        payment_remarks = $3,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4 RETURNING *`,
+      [payment.payment_method, payment.payment_transaction_id, payment.payment_remarks, orderId]
+    );
+
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export { VALID_STATUSES, VALID_PAYMENT_METHODS };

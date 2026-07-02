@@ -75,8 +75,18 @@ export const useOrderStore = defineStore('order', () => {
     return data;
   }
 
-  async function exportCSV() {
-    const response = await api.get('/orders/export/csv', { responseType: 'blob' });
+  async function updatePayment(id, paymentData) {
+    const { data } = await api.put(`/orders/${id}/payment`, paymentData);
+    const idx = orders.value.findIndex((o) => o.id === id);
+    if (idx !== -1) orders.value[idx] = data;
+    return data;
+  }
+
+  async function exportCSV(params = {}) {
+    const response = await api.get('/orders/export/csv', {
+      params,
+      responseType: 'blob',
+    });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
@@ -97,6 +107,7 @@ export const useOrderStore = defineStore('order', () => {
     pollNewOrders,
     fetchOrder,
     updateStatus,
+    updatePayment,
     exportCSV,
   };
 });
