@@ -4,25 +4,6 @@
       <h1 class="page-title">📋 Checkout</h1>
 
       <div class="checkout-grid">
-        <div class="order-summary">
-          <h2>Order Summary</h2>
-          <div v-for="item in cartStore.items" :key="item.product_id" class="summary-item">
-            <div class="summary-item__thumb">
-              <img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" loading="lazy" />
-              <span v-else>🎆</span>
-            </div>
-            <div class="summary-item__info">
-              <span class="summary-item__name">{{ item.product_name }} × {{ item.quantity }}</span>
-              <span class="summary-item__unit">{{ formatPrice(item.price) }} / pc</span>
-            </div>
-            <span class="summary-item__total">{{ formatPrice(item.price * item.quantity) }}</span>
-          </div>
-          <div class="summary-total">
-            <span>Total</span>
-            <strong>{{ formatPrice(cartStore.total) }}</strong>
-          </div>
-        </div>
-
         <form class="checkout-form" @submit.prevent="handleSubmit">
           <h2>Customer Details</h2>
 
@@ -86,6 +67,37 @@
 
           <p v-if="error" class="error-msg">{{ error }}</p>
         </form>
+
+        <div class="order-summary">
+          <button
+            type="button"
+            class="order-summary__toggle"
+            :aria-expanded="summaryOpen"
+            @click="summaryOpen = !summaryOpen"
+          >
+            <span>Order Summary ({{ cartStore.itemCount }} items · {{ formatPrice(cartStore.total) }})</span>
+            <span class="order-summary__chevron" :class="{ open: summaryOpen }">▾</span>
+          </button>
+
+          <div class="order-summary__body" :class="{ open: summaryOpen }">
+            <h2 class="order-summary__title">Order Summary</h2>
+            <div v-for="item in cartStore.items" :key="item.product_id" class="summary-item">
+              <div class="summary-item__thumb">
+                <img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" loading="lazy" />
+                <span v-else>🎆</span>
+              </div>
+              <div class="summary-item__info">
+                <span class="summary-item__name">{{ item.product_name }} × {{ item.quantity }}</span>
+                <span class="summary-item__unit">{{ formatPrice(item.price) }} / pc</span>
+              </div>
+              <span class="summary-item__total">{{ formatPrice(item.price * item.quantity) }}</span>
+            </div>
+            <div class="summary-total">
+              <span>Total</span>
+              <strong>{{ formatPrice(cartStore.total) }}</strong>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -104,6 +116,7 @@ const orderStore = useOrderStore();
 
 const submitting = ref(false);
 const error = ref('');
+const summaryOpen = ref(false);
 
 const form = ref({
   customer_name: '',
@@ -149,7 +162,7 @@ async function handleSubmit() {
 
 <style lang="scss" scoped>
 .checkout-page {
-  padding: 32px 0 60px;
+  padding: 32px 0 120px;
 }
 
 .page-title {
@@ -159,18 +172,57 @@ async function handleSubmit() {
 
 .checkout-grid {
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
+  grid-template-columns: 1.2fr 1fr;
   gap: 32px;
   align-items: start;
 }
 
+.checkout-form {
+  order: 1;
+}
+
 .order-summary {
   @include card;
-  padding: 24px;
+  padding: 0;
+  overflow: hidden;
+  order: 2;
   position: sticky;
   top: calc($header-height + 20px);
 
-  h2 { margin-bottom: 20px; font-size: 1.2rem; }
+  &__toggle {
+    display: none;
+    width: 100%;
+    padding: 16px 20px;
+    border: none;
+    background: $white;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: $text-dark;
+    cursor: pointer;
+    text-align: left;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__chevron {
+    transition: transform 0.2s ease;
+    color: $text-muted;
+
+    &.open {
+      transform: rotate(180deg);
+    }
+  }
+
+  &__body {
+    padding: 24px;
+  }
+
+  &__title {
+    margin: 0 0 20px;
+    font-size: 1.2rem;
+  }
 
   .summary-item {
     display: flex;
@@ -263,7 +315,43 @@ async function handleSubmit() {
 }
 
 @media (max-width: 768px) {
-  .checkout-grid { grid-template-columns: 1fr; }
+  .checkout-page {
+    padding-bottom: 140px;
+  }
+
+  .checkout-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .checkout-form {
+    order: 1;
+  }
+
+  .order-summary {
+    order: 2;
+    position: static;
+    top: auto;
+  }
+
+  .order-summary__toggle {
+    display: flex;
+    border-bottom: 1px solid $border;
+  }
+
+  .order-summary__body {
+    display: none;
+    padding: 0 20px 20px;
+
+    &.open {
+      display: block;
+    }
+  }
+
+  .order-summary__title {
+    display: none;
+  }
+
   .form-row { grid-template-columns: 1fr; }
 }
 </style>

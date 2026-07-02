@@ -1,7 +1,19 @@
 <template>
   <div>
-    <button class="floating-cart" @click="cartStore.toggleDrawer()">
-      <span class="floating-cart__icon">🛒</span>
+    <button class="floating-cart" @click="cartStore.toggleDrawer()" aria-label="Open cart">
+      <span class="floating-cart__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M2 3h2.4l2.8 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6L22 6H6"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <circle cx="10" cy="20" r="1.5" fill="currentColor" />
+          <circle cx="18" cy="20" r="1.5" fill="currentColor" />
+        </svg>
+      </span>
       <span v-if="cartStore.itemCount" class="floating-cart__badge">{{ cartStore.itemCount }}</span>
       <span v-if="cartStore.total > 0" class="floating-cart__total">{{ formatPrice(cartStore.total) }}</span>
     </button>
@@ -88,7 +100,23 @@ const cartStore = useCartStore();
     box-shadow: 0 8px 30px rgba(125, 60, 94, 0.5);
   }
 
-  &__icon { font-size: 1.3rem; }
+  &__icon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.95);
+    color: $primary;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
 
   &__badge {
     background: $white;

@@ -17,11 +17,11 @@
         <span class="stat-icon">💰</span>
         <div><strong>{{ formatPrice(stats.totalRevenue) }}</strong><span>Total Revenue</span></div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card--products">
         <span class="stat-icon">🎇</span>
         <div><strong>{{ stats.totalProducts }}</strong><span>Products</span></div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card--categories">
         <span class="stat-icon">📁</span>
         <div><strong>{{ stats.totalCategories }}</strong><span>Categories</span></div>
       </div>
@@ -57,7 +57,8 @@
 
     <div class="recent-orders">
       <h2>Recent Orders</h2>
-      <table class="admin-table">
+      <div class="table-scroll">
+        <table class="admin-table">
         <thead>
           <tr><th>Order #</th><th>Customer</th><th>Phone</th><th>Total</th><th>Status</th><th>Date</th></tr>
         </thead>
@@ -71,7 +72,8 @@
             <td>{{ new Date(order.created_at).toLocaleDateString('en-IN') }}</td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -134,6 +136,8 @@ function statusPercent(count) {
   &--warning { border-left-color: #f59e0b; }
   &--success { border-left-color: #22c55e; }
   &--revenue { border-left-color: $accent; }
+  &--products { border-left-color: #8b5cf6; }
+  &--categories { border-left-color: #64748b; }
 
   .stat-icon { font-size: 1.8rem; }
   strong { display: block; font-size: 1.4rem; color: $text-dark; }
@@ -221,7 +225,13 @@ function statusPercent(count) {
   h2 { margin-bottom: 16px; }
 }
 
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .admin-table {
+  min-width: 640px;
   width: 100%;
   border-collapse: collapse;
   th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid $border; font-size: 0.85rem; }
@@ -242,6 +252,51 @@ function statusPercent(count) {
 }
 
 @media (max-width: 768px) {
-  .charts-row { grid-template-columns: 1fr; }
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat-card {
+    padding: 14px 12px;
+    gap: 10px;
+
+    .stat-icon { font-size: 1.4rem; flex-shrink: 0; }
+    strong { font-size: 1.15rem; }
+    span { font-size: 0.72rem; line-height: 1.2; }
+  }
+
+  .charts-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .chart-card {
+    padding: 16px;
+
+    h3 { margin-bottom: 12px; }
+  }
+
+  .bar-chart {
+    height: 120px;
+    padding-top: 12px;
+  }
+
+  .status-row {
+    grid-template-columns: 88px 1fr 24px;
+    gap: 8px;
+  }
+
+  .recent-orders {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

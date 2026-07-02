@@ -35,18 +35,22 @@ const router = useRouter();
 const authStore = useAuthStore();
 const sidebarOpen = ref(false);
 
-const navItems = [
+const allNavItems = [
   { path: '/admin/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/admin/banners', label: 'Banners', icon: '🖼️' },
   { path: '/admin/categories', label: 'Categories', icon: '📁' },
   { path: '/admin/products', label: 'Products', icon: '🎇' },
   { path: '/admin/orders', label: 'Orders', icon: '📦' },
-  { path: '/admin/images', label: 'Images', icon: '📷' },
+  { path: '/admin/images', label: 'Images', icon: '📷', requiresImagesAccess: true },
   { path: '/admin/settings', label: 'Settings', icon: '⚙️' },
 ];
 
+const navItems = computed(() =>
+  allNavItems.filter((item) => !item.requiresImagesAccess || authStore.canManageImages)
+);
+
 const pageTitle = computed(() => {
-  const item = navItems.find(n => route.path.startsWith(n.path));
+  const item = navItems.value.find(n => route.path.startsWith(n.path));
   return item?.label || 'Admin';
 });
 
@@ -60,6 +64,7 @@ function handleLogout() {
 .admin-layout {
   display: flex;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -128,6 +133,8 @@ function handleLogout() {
   flex: 1;
   margin-left: 260px;
   background: #f5f5f5;
+  min-width: 0;
+  width: 100%;
 }
 
 .admin-header {
@@ -161,19 +168,48 @@ function handleLogout() {
 
 @media (max-width: 768px) {
   .sidebar {
+    width: min(280px, 86vw);
     transform: translateX(-100%);
+    box-shadow: none;
 
     &.open {
       transform: translateX(0);
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    }
+
+    &:not(.open) {
+      visibility: hidden;
+      pointer-events: none;
     }
   }
 
   .admin-main {
     margin-left: 0;
+    width: 100%;
+  }
+
+  .admin-header {
+    padding: 14px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+
+    h1 {
+      font-size: 1.15rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 
   .menu-toggle {
     display: block;
+    flex-shrink: 0;
+    padding: 4px;
+  }
+
+  .admin-content {
+    padding: 16px;
   }
 
   .sidebar-overlay {

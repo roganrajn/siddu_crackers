@@ -31,7 +31,12 @@ const routes = [
       { path: 'products', name: 'admin-products', component: () => import('@/pages/admin/ProductsPage.vue') },
       { path: 'orders', name: 'admin-orders', component: () => import('@/pages/admin/OrdersPage.vue') },
       { path: 'orders/:id', name: 'admin-order-detail', component: () => import('@/pages/admin/OrderDetailPage.vue') },
-      { path: 'images', name: 'admin-images', component: () => import('@/pages/admin/ImagesPage.vue') },
+      {
+        path: 'images',
+        name: 'admin-images',
+        component: () => import('@/pages/admin/ImagesPage.vue'),
+        meta: { requiresImagesAccess: true },
+      },
       { path: 'settings', name: 'admin-settings', component: () => import('@/pages/admin/SettingsPage.vue') },
     ],
   },
@@ -46,11 +51,21 @@ const router = createRouter({
   },
 });
 
+const IMAGES_ADMIN_EMAIL = 'roganinnovater@gmail.com';
+
 router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth) {
     const token = localStorage.getItem('admin_token');
     if (!token) return next('/admin/login');
   }
+
+  if (to.meta.requiresImagesAccess) {
+    const user = JSON.parse(localStorage.getItem('admin_user') || 'null');
+    if (user?.email?.toLowerCase() !== IMAGES_ADMIN_EMAIL) {
+      return next('/admin/dashboard');
+    }
+  }
+
   next();
 });
 
