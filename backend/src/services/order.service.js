@@ -218,6 +218,13 @@ export async function updateOrderStatus(orderId, status, note = null) {
     throw err;
   }
 
+  const id = parseInt(orderId, 10);
+  if (!id) {
+    const err = new Error('Invalid order id');
+    err.status = 400;
+    throw err;
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -225,24 +232,32 @@ export async function updateOrderStatus(orderId, status, note = null) {
     const result = await client.query(
       `UPDATE orders SET
         status = $1,
-        payment_method = CASE WHEN $1 = 'confirmed' THEN COALESCE(payment_method, 'not_received') ELSE payment_method END,
+        payment_method = CASE
+          WHEN $1 = 'confirmed' THEN COALESCE(payment_method, 'not_received')
+          ELSE payment_method
+        END,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $2 RETURNING *`,
-      [normalized, orderId]
+      [normalized, id]
     );
 
     if (!result.rows[0]) {
+      await client.query('ROLLBACK');
       const err = new Error('Order not found');
       err.status = 404;
       throw err;
     }
 
-    await logOrderStatus(client, orderId, normalized, note || `Status changed to ${normalized}`);
+    await logOrderStatus(client, id, normalized, note || `Status changed to ${normalized}`);
     await client.query('COMMIT');
 
     return result.rows[0];
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore rollback errors
+    }
     throw error;
   } finally {
     client.release();
@@ -250,11 +265,18 @@ export async function updateOrderStatus(orderId, status, note = null) {
 }
 
 export async function updateOrderPayment(orderId, paymentData) {
+  const id = parseInt(orderId, 10);
+  if (!id) {
+    const err = new Error('Invalid order id');
+    err.status = 400;
+    throw err;
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const existing = await client.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+    const existing = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
     if (!existing.rows[0]) {
       const err = new Error('Order not found');
       err.status = 404;
@@ -289,13 +311,17 @@ export async function updateOrderPayment(orderId, paymentData) {
         payment_remarks = $3,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $4 RETURNING *`,
-      [payment.payment_method, payment.payment_transaction_id, payment.payment_remarks, orderId]
+      [payment.payment_method, payment.payment_transaction_id, payment.payment_remarks, id]
     );
 
     await client.query('COMMIT');
     return result.rows[0];
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore rollback errors
+    }
     throw error;
   } finally {
     client.release();

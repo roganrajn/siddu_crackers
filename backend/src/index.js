@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { verifySmtpConnection } from './services/email.service.js';
 import { isS3Configured, listS3Objects } from './config/s3.js';
+import { ensureSchema } from './config/ensureSchema.js';
 import authRoutes from './routes/auth.js';
 import categoryRoutes from './routes/categories.js';
 import productRoutes from './routes/products.js';
@@ -26,6 +27,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:5173',
   'https://sidducrackers.in',
+  'https://app.sidducrackers.in',
 ].filter(Boolean);
 
 app.use(cors({
@@ -69,8 +71,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🎆 Siddu Crackers API running on port ${PORT}`);
+  try {
+    await ensureSchema();
+  } catch (e) {
+    console.error('[db] Schema ensure failed:', e.message);
+  }
   verifySmtpConnection();
   if (isS3Configured()) {
     listS3Objects({ maxKeys: 1 })

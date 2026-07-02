@@ -46,8 +46,22 @@ jobs:
 
             npm install
 
+            echo "Running database migrations..."
+            cd ..
+            if [ -f backend/.env ]; then
+              DATABASE_URL=$(grep '^DATABASE_URL=' backend/.env | cut -d= -f2-)
+              for migration in database/migration_v5.sql database/migration_v6.sql database/migration_v7.sql; do
+                if [ -f "$migration" ]; then
+                  echo "Applying $migration..."
+                  psql "$DATABASE_URL" -f "$migration" || echo "Warning: $migration skipped or failed"
+                fi
+              done
+            fi
+
             echo "Restarting Backend..."
-            pm2 restart siddu-backend || pm2 start index.js --name siddu-backend
+            cd backend
+
+            pm2 restart siddu-backend || pm2 start npm --name siddu-backend -- start
 
             echo "Updating Nginx upload limit..."
             NGINX_CONF="/etc/nginx/nginx.conf"

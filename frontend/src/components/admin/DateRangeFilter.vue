@@ -12,9 +12,9 @@
     </button>
 
     <div v-if="datePreset === 'custom'" class="custom-range">
-      <input :value="customDateFrom" type="date" @input="onFromInput" />
+      <input :value="customDateFrom" type="date" @input="onFromInput" @change="onFromInput" />
       <span class="range-sep">to</span>
-      <input :value="customDateTo" type="date" @input="onToInput" />
+      <input :value="customDateTo" type="date" @input="onToInput" @change="onToInput" />
     </div>
   </div>
 </template>

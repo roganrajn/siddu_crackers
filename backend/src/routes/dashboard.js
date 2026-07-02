@@ -1,39 +1,15 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { APP_TIMEZONE, buildOrderDateFilter, localOrderDateSql } from '../utils/dateFilter.js';
 
 const router = express.Router();
-
-function buildDateFilter(date_from, date_to, startIndex = 1) {
-  const parts = [];
-  const params = [];
-  let i = startIndex;
-
-  if (date_from) {
-    parts.push(`created_at >= $${i++}::date`);
-    params.push(date_from);
-  }
-  if (date_to) {
-    parts.push(`created_at < ($${i++}::date + INTERVAL '1 day')`);
-    params.push(date_to);
-  }
-
-  return {
-    where: parts.length ? `WHERE ${parts.join(' AND ')}` : '',
-    and: parts.length ? `AND ${parts.join(' AND ')}` : '',
-    params,
-    nextIndex: i,
-  };
-}
 
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const { date_from, date_to } = req.query;
     const hasDateFilter = Boolean(date_from || date_to);
-    const dateFilter = buildDateFilter(date_from, date_to);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const dateFilter = buildOrderDateFilter(date_from, date_to);
 
     let orderCountQuery;
     let orderCountParams;
@@ -42,8 +18,8 @@ router.get('/stats', authMiddleware, async (req, res) => {
       orderCountQuery = `SELECT COUNT(*) FROM orders ${dateFilter.where}`;
       orderCountParams = dateFilter.params;
     } else {
-      orderCountQuery = 'SELECT COUNT(*) FROM orders WHERE created_at >= $1';
-      orderCountParams = [today];
+      orderCountQuery = `SELECT COUNT(*) FROM orders WHERE ${localOrderDateSql()} = (NOW() AT TIME ZONE '${APP_TIMEZONE}')::date`;
+      orderCountParams = [];
     }
 
     const pendingWhere = `WHERE status = 'new' ${dateFilter.and}`.replace('WHERE  ', 'WHERE ');
@@ -73,16 +49,16 @@ router.get('/stats', authMiddleware, async (req, res) => {
 
     if (hasDateFilter) {
       chartQuery = `
-        SELECT DATE(created_at) as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue
+        SELECT ${localOrderDateSql()} as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue
         FROM orders ${dateFilter.where}
-        GROUP BY DATE(created_at) ORDER BY date ASC
+        GROUP BY ${localOrderDateSql()} ORDER BY date ASC
       `;
       chartParams = dateFilter.params;
     } else {
       chartQuery = `
-        SELECT DATE(created_at) as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue
+        SELECT ${localOrderDateSql()} as date, COUNT(*) as orders, COALESCE(SUM(total_amount), 0) as revenue
         FROM orders WHERE created_at >= NOW() - INTERVAL '7 days'
-        GROUP BY DATE(created_at) ORDER BY date ASC
+        GROUP BY ${localOrderDateSql()} ORDER BY date ASC
       `;
       chartParams = [];
     }

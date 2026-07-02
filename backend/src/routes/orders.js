@@ -8,6 +8,7 @@ import {
   CUSTOMER_STATUS_MAP,
   normalizeStatus,
 } from '../services/order.service.js';
+import { buildOrderDateFilter } from '../utils/dateFilter.js';
 
 const router = express.Router();
 
@@ -30,13 +31,12 @@ function buildOrderFilters(query) {
     where.push(`created_at > $${paramIndex++}`);
     params.push(new Date(since).toISOString());
   }
-  if (date_from) {
-    where.push(`created_at >= $${paramIndex++}::date`);
-    params.push(date_from);
-  }
-  if (date_to) {
-    where.push(`created_at < ($${paramIndex++}::date + INTERVAL '1 day')`);
-    params.push(date_to);
+
+  const dateFilter = buildOrderDateFilter(date_from, date_to, paramIndex);
+  if (dateFilter.sql) {
+    where.push(dateFilter.sql);
+    params.push(...dateFilter.params);
+    paramIndex = dateFilter.nextIndex;
   }
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -174,6 +174,7 @@ router.put('/:id/payment', authMiddleware, async (req, res) => {
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
     if (error.status === 404) return res.status(404).json({ error: error.message });
+    console.error('Update order payment error:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -186,6 +187,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
     if (error.status === 404) return res.status(404).json({ error: error.message });
+    console.error('Update order status error:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
 });

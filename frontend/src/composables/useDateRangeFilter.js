@@ -43,7 +43,10 @@ export function useDateRangeFilter(onApply) {
     }
 
     if (datePreset.value === 'custom' && customDateFrom.value && customDateTo.value) {
-      return { date_from: customDateFrom.value, date_to: customDateTo.value };
+      let from = customDateFrom.value;
+      let to = customDateTo.value;
+      if (from > to) [from, to] = [to, from];
+      return { date_from: from, date_to: to };
     }
 
     return {};
