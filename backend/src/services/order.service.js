@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 import { sendOrderEmails } from './email.service.js';
 import { calculateOrderBreakdown, normalizeOrderSettings } from '../utils/orderPricing.js';
 
-const VALID_STATUSES = ['new', 'confirmed', 'cancelled'];
+const VALID_STATUSES = ['new', 'confirmed', 'paid', 'cancelled'];
 
 const LEGACY_STATUS_ALIASES = {
   called_customer: 'new',
@@ -17,6 +17,7 @@ const VALID_PAYMENT_METHODS = ['not_received', 'upi', 'bank_transfer', 'cash'];
 export const CUSTOMER_STATUS_MAP = {
   new: 'Received',
   confirmed: 'Confirmed',
+  paid: 'Paid',
   cancelled: 'Cancelled',
   contacted: 'Received',
   called_customer: 'Received',
@@ -33,6 +34,14 @@ export function resolvePaymentFields({ payment_method, payment_transaction_id, p
   let method = payment_method || 'not_received';
   let transactionId = payment_transaction_id?.trim() || null;
   let remarks = payment_remarks?.trim() || null;
+
+  if (method === 'not_received') {
+    return {
+      payment_method: 'not_received',
+      payment_transaction_id: null,
+      payment_remarks: null,
+    };
+  }
 
   if (method === 'upi' || method === 'bank_transfer') {
     if (!transactionId) {
@@ -298,8 +307,16 @@ export async function updateOrderStatus(orderId, status, note = null) {
       `UPDATE orders SET
         status = $1::varchar,
         payment_method = CASE
-          WHEN $1::varchar = 'confirmed' THEN COALESCE(payment_method, 'not_received')
+          WHEN $1::varchar = 'confirmed' THEN 'not_received'
           ELSE payment_method
+        END,
+        payment_transaction_id = CASE
+          WHEN $1::varchar = 'confirmed' THEN NULL
+          ELSE payment_transaction_id
+        END,
+        payment_remarks = CASE
+          WHEN $1::varchar = 'confirmed' THEN NULL
+          ELSE payment_remarks
         END,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $2 RETURNING *`,
@@ -350,8 +367,8 @@ export async function updateOrderPayment(orderId, paymentData) {
 
     const order = existing.rows[0];
     const normalizedStatus = normalizeStatus(order.status);
-    if (normalizedStatus !== 'confirmed') {
-      const err = new Error('Payment can only be updated for confirmed orders');
+    if (!['confirmed', 'paid'].includes(normalizedStatus)) {
+      const err = new Error('Payment can only be updated for confirmed or paid orders');
       err.status = 400;
       throw err;
     }
@@ -363,20 +380,51 @@ export async function updateOrderPayment(orderId, paymentData) {
       throw err;
     }
 
+    if (method === 'not_received') {
+      const result = await client.query(
+        `UPDATE orders SET
+          payment_method = 'not_received',
+          payment_transaction_id = NULL,
+          payment_remarks = NULL,
+          status = 'confirmed',
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 RETURNING *`,
+        [id]
+      );
+
+      await logOrderStatus(client, id, 'confirmed', 'Payment marked as not received');
+      await client.query('COMMIT');
+      return result.rows[0];
+    }
+
     const payment = resolvePaymentFields({
       payment_method: method || order.payment_method,
       payment_transaction_id: paymentData.payment_transaction_id ?? order.payment_transaction_id,
       payment_remarks: paymentData.payment_remarks ?? order.payment_remarks,
     });
 
+    if (payment.payment_method === 'not_received') {
+      const err = new Error('Transaction ID is required for UPI and Bank Transfer');
+      err.status = 400;
+      throw err;
+    }
+
     const result = await client.query(
       `UPDATE orders SET
         payment_method = $1,
         payment_transaction_id = $2,
         payment_remarks = $3,
+        status = 'paid',
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $4 RETURNING *`,
       [payment.payment_method, payment.payment_transaction_id, payment.payment_remarks, id]
+    );
+
+    await logOrderStatus(
+      client,
+      id,
+      'paid',
+      `Payment received via ${payment.payment_method}`
     );
 
     await client.query('COMMIT');

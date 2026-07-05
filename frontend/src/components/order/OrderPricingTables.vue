@@ -28,33 +28,11 @@
       </table>
     </div>
 
-    <div v-if="breakdown" class="order-pricing__summary-wrap">
-      <h4 class="order-pricing__summary-title">Summary</h4>
-      <table class="order-pricing__summary">
-        <tbody>
-          <tr>
-            <td>Sub Total</td>
-            <td>{{ formatPrice(breakdown.subtotal_mrp) }}</td>
-          </tr>
-          <tr>
-            <td>{{ breakdown.discount_label || 'Discount' }}</td>
-            <td class="negative">-{{ formatPrice(breakdown.discount_amount) }}</td>
-          </tr>
-          <tr>
-            <td>After Discount</td>
-            <td>{{ formatPrice(breakdown.after_discount) }}</td>
-          </tr>
-          <tr>
-            <td>Packing ({{ formatPct(breakdown.packing_percentage) }})</td>
-            <td>{{ formatPrice(breakdown.packing_amount) }}</td>
-          </tr>
-          <tr class="order-pricing__net-row">
-            <td>Net Amount</td>
-            <td>{{ formatPrice(breakdown.net_amount) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <OrderPricingSummary
+      v-if="breakdown"
+      :breakdown="breakdown"
+      variant="table"
+    />
 
     <div v-else-if="fallbackTotal != null" class="order-pricing__legacy-total">
       <strong>Grand Total:</strong> {{ formatPrice(fallbackTotal) }}
@@ -64,6 +42,7 @@
 
 <script setup>
 import { formatPrice } from '@/utils/helpers';
+import OrderPricingSummary from '@/components/order/OrderPricingSummary.vue';
 import {
   getItemMrp,
   getItemOffer,
@@ -80,11 +59,6 @@ defineProps({
 function itemKey(item, index) {
   return item.id || item.product_id || `${item.product_name}-${index}`;
 }
-
-function formatPct(value) {
-  const num = parseFloat(value);
-  return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2).replace(/\.?0+$/, '')}%`;
-}
 </script>
 
 <style lang="scss" scoped>
@@ -94,13 +68,10 @@ function formatPct(value) {
   gap: 20px;
 }
 
-.order-pricing__items-wrap,
-.order-pricing__summary-wrap {
+.order-pricing__items-wrap {
   overflow-x: auto;
 }
-
-.order-pricing__items,
-.order-pricing__summary {
+.order-pricing__items {
   width: 100%;
   border-collapse: collapse;
   border: 1px solid #1f1f1f;
@@ -160,47 +131,9 @@ function formatPct(value) {
   text-align: right;
 }
 
-.order-pricing__summary-wrap {
-  align-self: flex-end;
-  width: min(100%, 360px);
-}
-
-.order-pricing__summary-title {
-  margin: 0 0 8px;
-  font-size: 1rem;
-  color: $primary-dark;
-}
-
-.order-pricing__summary {
-  td:last-child {
-    text-align: right;
-    font-weight: 600;
-  }
-
-  .negative {
-    color: #b91c1c;
-  }
-}
-
-.order-pricing__net-row {
-  background: $primary-dark !important;
-  color: $white;
-
-  td {
-    font-weight: 700;
-    border-color: $primary-dark;
-  }
-}
-
 .order-pricing__legacy-total {
   text-align: right;
   font-size: 1.1rem;
   color: $primary;
-}
-
-@media (max-width: 768px) {
-  .order-pricing__summary-wrap {
-    width: 100%;
-  }
 }
 </style>

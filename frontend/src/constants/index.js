@@ -11,6 +11,7 @@ export const PRODUCT_TAGS = [
 export const ORDER_STATUSES = [
   { value: 'new', label: 'New', customerLabel: 'Received', color: '#2563eb' },
   { value: 'confirmed', label: 'Confirmed', customerLabel: 'Confirmed', color: '#059669' },
+  { value: 'paid', label: 'Paid', customerLabel: 'Paid', color: '#047857' },
   { value: 'cancelled', label: 'Cancelled', customerLabel: 'Cancelled', color: '#dc2626' },
 ];
 
@@ -29,6 +30,7 @@ export const LEGACY_STATUS_MAP = {
   packed: 'confirmed',
   completed: 'confirmed',
   confirmed: 'confirmed',
+  paid: 'paid',
   cancelled: 'cancelled',
   new: 'new',
 };
@@ -44,12 +46,29 @@ export function getEffectivePaymentMethod(order) {
   if ((method === 'upi' || method === 'bank_transfer') && !txnId) {
     return 'not_received';
   }
-  return method;
+  if (method === 'cash') return 'cash';
+  if (method === 'upi' || method === 'bank_transfer') return method;
+  return 'not_received';
+}
+
+export function isPaymentReceived(order) {
+  if (!order) return false;
+  if (normalizeOrderStatus(order.status) === 'paid') return true;
+  return getEffectivePaymentMethod(order) !== 'not_received';
+}
+
+export function getPaymentStatusLabel(order) {
+  return isPaymentReceived(order) ? 'Paid' : 'Payment not received yet';
+}
+
+export function getPaymentMethodDetail(order) {
+  if (!isPaymentReceived(order)) return '';
+  const method = getEffectivePaymentMethod(order);
+  return PAYMENT_METHODS.find((m) => m.value === method)?.label || '';
 }
 
 export function getPaymentMethodLabel(order) {
-  const effective = getEffectivePaymentMethod(order);
-  return PAYMENT_METHODS.find((m) => m.value === effective)?.label || 'Payment not received yet';
+  return getPaymentStatusLabel(order);
 }
 
 export const CATEGORY_ICONS = {

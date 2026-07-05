@@ -1,17 +1,15 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import api from '@/services/api';
-
-const IMAGES_ADMIN_EMAIL = 'roganinnovater@gmail.com';
+import { isSuperAdmin } from '@/constants/admin';
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('admin_token') || null);
   const user = ref(JSON.parse(localStorage.getItem('admin_user') || 'null'));
 
   const isAuthenticated = computed(() => !!token.value);
-  const canManageImages = computed(
-    () => user.value?.email?.toLowerCase() === IMAGES_ADMIN_EMAIL
-  );
+  const canManageImages = computed(() => isSuperAdmin(user.value));
+  const canManageTheme = computed(() => isSuperAdmin(user.value));
 
   async function login(email, password) {
     const { data } = await api.post('/auth/login', { email, password });
@@ -49,6 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isAuthenticated,
     canManageImages,
+    canManageTheme,
     login,
     logout,
     changePassword,

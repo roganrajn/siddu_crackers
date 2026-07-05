@@ -15,11 +15,11 @@ export function normalizeOrderSettings(settings = {}) {
 }
 
 export function getItemMrp(item) {
-  return parseFloat(item.mrp_price ?? item.original_price ?? item.price ?? 0);
+  return roundMoney(item.mrp_price ?? item.original_price ?? item.price ?? 0);
 }
 
 export function getItemOffer(item) {
-  return parseFloat(item.price ?? item.offer_price ?? item.mrp_price ?? 0);
+  return roundMoney(item.price ?? item.offer_price ?? item.mrp_price ?? 0);
 }
 
 export function getItemDiscountPct(item) {

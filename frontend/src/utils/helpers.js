@@ -1,9 +1,17 @@
+import { roundMoney } from './pricing.js';
+
 export const formatPrice = (price) => {
+  const value = roundMoney(price);
+  if (Number.isNaN(value)) return '₹0';
+
+  const hasFraction = Math.abs(value % 1) > 0.001;
+
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(price);
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(value);
 };
 
 export const debounce = (fn, delay = 300) => {
@@ -30,7 +38,8 @@ export const getOrderWhatsAppMessage = ({ orderNumber, customerName, phone, tota
   const formattedTotal = new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(totalAmount || 0);
 
   return `Hello Siddu Crackers,

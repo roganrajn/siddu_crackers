@@ -3,7 +3,7 @@ import pool from '../config/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { uploadToS3 } from '../config/s3.js';
-import { slugify, calculateDiscount } from '../utils/helpers.js';
+import { slugify, resolveProductPricing } from '../utils/helpers.js';
 
 const router = express.Router();
 
@@ -185,7 +185,7 @@ router.post('/', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }, 
   try {
     await client.query('BEGIN');
     const {
-      name, description, original_price, offer_price, sku,
+      name, description, original_price, offer_price, discount_percentage, sku,
       is_featured, is_best_seller, is_visible, sort_order, category_ids, tags,
     } = req.body;
 
@@ -193,13 +193,18 @@ router.post('/', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }, 
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Product name is required' });
     }
-    if (original_price == null || original_price === '' || offer_price == null || offer_price === '') {
+
+    const pricing = resolveProductPricing({ original_price, discount_percentage, offer_price });
+    if (pricing?.error) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Original price and offer price are required' });
+      return res.status(400).json({ error: pricing.error });
+    }
+    if (!pricing) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Original price and discount percentage are required' });
     }
 
     const slug = slugify(name);
-    const discount = calculateDiscount(parseFloat(original_price), parseFloat(offer_price));
     const skuValue = sku?.trim() || null;
     let image_url = null;
     const parsedTags = tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : [];
@@ -211,7 +216,7 @@ router.post('/', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }, 
     const result = await client.query(
       `INSERT INTO products (name, slug, description, original_price, offer_price, discount_percentage, image_url, sku, tags, is_featured, is_best_seller, is_visible, sort_order)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
-      [name.trim(), slug, description, original_price, offer_price, discount, image_url, skuValue,
+      [name.trim(), slug, description, pricing.original_price, pricing.offer_price, pricing.discount_percentage, image_url, skuValue,
        parsedTags, is_featured === 'true', is_best_seller === 'true', is_visible !== 'false', sort_order || 0]
     );
 
@@ -258,15 +263,45 @@ router.put('/:id', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }
   try {
     await client.query('BEGIN');
     const {
-      name, description, original_price, offer_price, sku,
+      name, description, original_price, offer_price, discount_percentage, sku,
       is_featured, is_best_seller, is_visible, sort_order, category_ids, tags,
       remove_image_ids,
     } = req.body;
 
+    const existingProduct = await client.query(
+      'SELECT original_price, discount_percentage, offer_price FROM products WHERE id = $1',
+      [req.params.id]
+    );
+    if (!existingProduct.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const mergedOriginal = original_price != null && original_price !== ''
+      ? original_price
+      : existingProduct.rows[0].original_price;
+    const mergedDiscount = discount_percentage != null && discount_percentage !== ''
+      ? discount_percentage
+      : existingProduct.rows[0].discount_percentage;
+
+    let pricing;
+    if (
+      original_price != null && original_price !== ''
+      || discount_percentage != null && discount_percentage !== ''
+      || offer_price != null && offer_price !== ''
+    ) {
+      pricing = resolveProductPricing({
+        original_price: mergedOriginal,
+        discount_percentage: mergedDiscount,
+        offer_price,
+      });
+      if (pricing?.error) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: pricing.error });
+      }
+    }
+
     const slug = name ? slugify(name) : undefined;
-    const discount = original_price && offer_price
-      ? calculateDiscount(parseFloat(original_price), parseFloat(offer_price))
-      : undefined;
     let image_url = req.body.image_url;
     const parsedTags = tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : undefined;
     const skuValue = sku !== undefined ? (sku?.trim() || null) : undefined;
@@ -288,10 +323,14 @@ router.put('/:id', authMiddleware, upload.fields([{ name: 'image', maxCount: 1 }
         is_best_seller = COALESCE($11, is_best_seller),
         is_visible = COALESCE($12, is_visible),
         sort_order = COALESCE($13, sort_order),
-        price_updated_at = CASE WHEN $4 IS NOT NULL OR $5 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE price_updated_at END,
+        price_updated_at = CASE WHEN $4 IS NOT NULL OR $5 IS NOT NULL OR $6 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE price_updated_at END,
         updated_at = CURRENT_TIMESTAMP
        WHERE id = $14 RETURNING *`,
-      [name, slug, description, original_price, offer_price, discount, image_url, skuValue,
+      [name, slug, description,
+       pricing?.original_price ?? original_price,
+       pricing?.offer_price ?? offer_price,
+       pricing?.discount_percentage ?? discount_percentage,
+       image_url, skuValue,
        parsedTags, is_featured, is_best_seller, is_visible, sort_order, req.params.id]
     );
 

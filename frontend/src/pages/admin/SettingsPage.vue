@@ -32,9 +32,11 @@
       <h3 class="section-label">Branding</h3>
       <div class="settings-grid">
         <div class="form-group"><label>Company Name</label><input v-model="form.company_name" /></div>
-        <div class="form-group"><label>Primary Color</label><input v-model="form.primary_color" type="color" /></div>
-        <div class="form-group"><label>Secondary Color</label><input v-model="form.secondary_color" type="color" /></div>
-        <div class="form-group"><label>Accent Color</label><input v-model="form.accent_color" type="color" /></div>
+        <template v-if="authStore.canManageTheme">
+          <div class="form-group"><label>Primary Color</label><input v-model="form.primary_color" type="color" /></div>
+          <div class="form-group"><label>Secondary Color</label><input v-model="form.secondary_color" type="color" /></div>
+          <div class="form-group"><label>Accent Color</label><input v-model="form.accent_color" type="color" /></div>
+        </template>
         <div class="form-group"><label>Logo</label><input type="file" accept="image/*" @change="onLogoChange" /><img v-if="form.logo" :src="form.logo" class="logo-preview" loading="lazy" /></div>
         <div class="form-group"><label>Copyright Text</label><input v-model="form.copyright_text" /></div>
       </div>

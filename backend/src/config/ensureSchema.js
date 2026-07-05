@@ -25,6 +25,16 @@ export async function ensureSchema() {
   `);
 
   await pool.query(`
+    UPDATE orders SET status = 'paid'
+    WHERE status = 'confirmed'
+      AND payment_method IN ('upi', 'bank_transfer', 'cash')
+      AND (
+        payment_method = 'cash'
+        OR NULLIF(TRIM(payment_transaction_id), '') IS NOT NULL
+      );
+  `);
+
+  await pool.query(`
     ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS min_order_amount DECIMAL(10, 2) DEFAULT 5000;
     ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_discount_percentage DECIMAL(5, 2) DEFAULT 70;
     ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_special_discount_percentage DECIMAL(5, 2) DEFAULT 15;

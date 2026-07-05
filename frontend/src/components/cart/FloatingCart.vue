@@ -55,10 +55,11 @@
           </div>
 
           <div v-if="cartStore.items.length" class="cart-drawer__footer">
-            <div class="cart-drawer__subtotal">
-              <span>Net Amount</span>
-              <strong>{{ formatPrice(cartStore.total) }}</strong>
-            </div>
+            <OrderPricingSummary
+              :breakdown="cartStore.pricing"
+              variant="compact"
+              :show-title="false"
+            />
             <p v-if="!cartStore.meetsMinOrder" class="cart-drawer__min">
               Min order {{ formatPrice(cartStore.pricing.min_order_amount) }}
             </p>
@@ -81,6 +82,7 @@
 <script setup>
 import { useCartStore } from '@/stores/cartStore';
 import { formatPrice } from '@/utils/helpers';
+import OrderPricingSummary from '@/components/order/OrderPricingSummary.vue';
 
 const cartStore = useCartStore();
 </script>
@@ -204,15 +206,6 @@ const cartStore = useCartStore();
   &__footer {
     padding: 20px;
     border-top: 1px solid $border;
-  }
-
-  &__subtotal {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    font-size: 1.1rem;
-
-    strong { color: $primary; font-size: 1.3rem; }
   }
 
   &__min {

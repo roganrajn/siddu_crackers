@@ -43,7 +43,7 @@
           <td>{{ product.sku }}</td>
           <td>{{ formatPrice(product.original_price) }}</td>
           <td>{{ formatPrice(product.offer_price) }}</td>
-          <td>{{ product.discount_percentage }}%</td>
+          <td>{{ formatPercent(product.discount_percentage) }}%</td>
           <td>
             <span :class="['status-badge', product.is_visible ? 'confirmed' : 'cancelled']">
               {{ product.is_visible ? 'Visible' : 'Hidden' }}
@@ -97,9 +97,15 @@
                 <input v-model.number="form.original_price" type="number" step="0.01" min="0" required />
               </div>
               <div class="form-group">
-                <label>Offer Price *</label>
-                <input v-model.number="form.offer_price" type="number" step="0.01" min="0" required />
+                <label>Discount Percentage *</label>
+                <input v-model.number="form.discount_percentage" type="number" step="0.01" min="0" max="100" required />
               </div>
+              <div class="form-group">
+                <label>Offer Price</label>
+                <input :value="formattedOfferPrice" type="text" readonly class="input-readonly" />
+              </div>
+            </div>
+            <div class="form-grid form-grid--1">
               <div class="form-group">
                 <label>Sort Order</label>
                 <input v-model.number="form.sort_order" type="number" min="0" />
@@ -152,6 +158,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useProductStore } from '@/stores/productStore';
 import { useCategoryStore } from '@/stores/categoryStore';
 import { formatPrice, debounce } from '@/utils/helpers';
+import { calculateOfferPrice, roundMoney, roundPercent, formatPercent } from '@/utils/pricing';
 
 const productStore = useProductStore();
 const categoryStore = useCategoryStore();
@@ -172,9 +179,15 @@ const imageFile = ref(null);
 const imagePreview = ref(null);
 
 const form = ref({
-  name: '', sku: '', description: '', original_price: 0, offer_price: 0,
+  name: '', sku: '', description: '', original_price: 0, discount_percentage: 0,
   sort_order: 0, category_ids: [], is_visible: true, is_best_seller: false, is_featured: false,
 });
+
+const computedOfferPrice = computed(() =>
+  calculateOfferPrice(form.value.original_price, form.value.discount_percentage)
+);
+
+const formattedOfferPrice = computed(() => formatPrice(computedOfferPrice.value));
 
 const debouncedSearch = debounce(() => {
   page.value = 1;
@@ -218,14 +231,15 @@ function openModal(product = null) {
   if (product) {
     form.value = {
       name: product.name, sku: product.sku, description: product.description || '',
-      original_price: parseFloat(product.original_price), offer_price: parseFloat(product.offer_price),
+      original_price: roundMoney(product.original_price),
+      discount_percentage: roundPercent(product.discount_percentage),
       sort_order: product.sort_order, category_ids: product.categories?.map(c => c.id) || [],
       is_visible: product.is_visible, is_best_seller: product.is_best_seller, is_featured: product.is_featured,
     };
     imagePreview.value = product.image_url || null;
   } else {
     form.value = {
-      name: '', sku: '', description: '', original_price: 0, offer_price: 0,
+      name: '', sku: '', description: '', original_price: 0, discount_percentage: 0,
       sort_order: 0, category_ids: [], is_visible: true, is_best_seller: false, is_featured: false,
     };
     imagePreview.value = null;
@@ -248,7 +262,14 @@ async function handleSave() {
   saveError.value = '';
   try {
     const fd = new FormData();
-    Object.entries(form.value).forEach(([key, val]) => {
+    const payload = {
+      ...form.value,
+      original_price: roundMoney(form.value.original_price),
+      discount_percentage: roundPercent(form.value.discount_percentage),
+      offer_price: computedOfferPrice.value,
+    };
+
+    Object.entries(payload).forEach(([key, val]) => {
       if (key === 'category_ids') {
         fd.append(key, JSON.stringify(val));
       } else if (key === 'sku' && !String(val || '').trim()) {
@@ -368,6 +389,7 @@ async function handleDelete(product) {
 
   &--2 { grid-template-columns: 1fr 1fr; }
   &--3 { grid-template-columns: repeat(3, 1fr); }
+  &--1 { grid-template-columns: 1fr; max-width: 220px; }
 }
 
 .category-grid {
@@ -428,6 +450,13 @@ async function handleDelete(product) {
   font-size: 0.8rem;
   color: $text-muted;
   margin-top: 6px;
+}
+
+.input-readonly {
+  background: $background;
+  color: $primary;
+  font-weight: 700;
+  cursor: default;
 }
 
 .save-error {

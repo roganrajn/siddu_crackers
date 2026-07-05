@@ -3,6 +3,7 @@ import pool from '../config/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { uploadToS3 } from '../config/s3.js';
+import { isSuperAdmin } from '../constants/admin.js';
 
 const router = express.Router();
 
@@ -17,10 +18,12 @@ router.get('/', async (req, res) => {
 
 router.put('/', authMiddleware, upload.single('logo'), async (req, res) => {
   try {
+    const canEditTheme = isSuperAdmin(req.user);
+    const themeFields = ['primary_color', 'secondary_color', 'accent_color'];
     const fields = [
       'company_name', 'phone', 'email', 'whatsapp', 'address', 'footer_text',
       'copyright_text', 'offer_banner', 'confirmation_time',
-      'primary_color', 'secondary_color', 'accent_color',
+      ...(canEditTheme ? themeFields : []),
       'google_map_embed', 'meta_title', 'meta_description',
       'google_analytics_id', 'facebook_pixel_id',
       'facebook', 'instagram', 'youtube',

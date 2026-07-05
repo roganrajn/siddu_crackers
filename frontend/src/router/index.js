@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { isSuperAdmin } from '@/constants/admin';
 
 const routes = [
   {
@@ -51,8 +52,6 @@ const router = createRouter({
   },
 });
 
-const IMAGES_ADMIN_EMAIL = 'roganinnovater@gmail.com';
-
 router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth) {
     const token = localStorage.getItem('admin_token');
@@ -61,7 +60,7 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresImagesAccess) {
     const user = JSON.parse(localStorage.getItem('admin_user') || 'null');
-    if (user?.email?.toLowerCase() !== IMAGES_ADMIN_EMAIL) {
+    if (!isSuperAdmin(user)) {
       return next('/admin/dashboard');
     }
   }

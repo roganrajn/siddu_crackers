@@ -174,8 +174,11 @@ async function pollForNewOrders() {
 }
 
 async function updateStatus(id, status) {
-  await orderStore.updateStatus(id, status);
+  const updated = await orderStore.updateStatus(id, status);
   const order = orders.value.find((o) => o.id === id);
+  if (order) {
+    Object.assign(order, updated);
+  }
   if (order && status !== 'new') {
     newOrderCount.value = Math.max(0, newOrderCount.value - 1);
   }
