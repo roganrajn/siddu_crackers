@@ -50,6 +50,21 @@
         <div class="form-group"><label>Footer Text</label><input v-model="form.footer_text" /></div>
       </div>
 
+      <h3 class="section-label">Order Rules</h3>
+      <div class="settings-grid">
+        <div class="form-group">
+          <label>Minimum Order Amount (₹)</label>
+          <input v-model.number="form.min_order_amount" type="number" min="0" step="1" />
+        </div>
+        <div class="form-group">
+          <label>Packing Charge (%)</label>
+          <input v-model.number="form.order_packing_percentage" type="number" min="0" max="100" step="0.01" />
+        </div>
+      </div>
+      <p class="settings-note">
+        Product discounts come from each product's MRP and offer price. Summary shows overall savings (e.g. Upto 80% discount).
+      </p>
+
       <h3 class="section-label">SEO & Analytics</h3>
       <div class="settings-grid">
         <div class="form-group"><label>Meta Title</label><input v-model="form.meta_title" /></div>
@@ -154,5 +169,11 @@ async function handleSave() {
 .logo-preview { max-width: 100px; margin-top: 8px; border-radius: $radius-sm; }
 .success-msg { color: #059669; margin-top: 12px; font-weight: 600; }
 .error-msg { color: #dc2626; margin-top: 12px; font-size: 0.9rem; }
+.settings-note {
+  margin: -4px 0 16px;
+  font-size: 0.85rem;
+  color: $text-muted;
+  line-height: 1.45;
+}
 @media (max-width: 768px) { .settings-grid { grid-template-columns: 1fr; } }
 </style>

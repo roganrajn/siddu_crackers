@@ -12,6 +12,8 @@ export const useSettingsStore = defineStore('settings', () => {
     footer_text: '© 2026 Siddu Crackers. All rights reserved.',
     offer_banner: '🔥 80% Discount on All Crackers! Book Your Order Now!',
     confirmation_time: 'Within 2 hours',
+    min_order_amount: 5000,
+    order_packing_percentage: 5,
     primary_color: '#7D3C5E',
     secondary_color: '#F04E8B',
     accent_color: '#00A9B0',

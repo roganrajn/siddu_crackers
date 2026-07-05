@@ -67,7 +67,13 @@ router.post('/track', async (req, res) => {
     const result = await pool.query(
       `SELECT o.*,
         COALESCE(
-          json_agg(json_build_object('product_name', oi.product_name, 'quantity', oi.quantity, 'price', oi.price, 'subtotal', oi.subtotal))
+          json_agg(json_build_object(
+            'product_name', oi.product_name,
+            'quantity', oi.quantity,
+            'price', oi.price,
+            'mrp_price', COALESCE(oi.mrp_price, oi.price),
+            'subtotal', oi.subtotal
+          ))
           FILTER (WHERE oi.id IS NOT NULL), '[]'
         ) as items
        FROM orders o
@@ -91,7 +97,17 @@ router.post('/track', async (req, res) => {
       order: {
         order_number: order.order_number,
         customer_name: order.customer_name,
-        total_amount: order.total_amount,
+        total_amount: order.net_amount || order.total_amount,
+        subtotal_mrp: order.subtotal_mrp,
+        discount_percentage: order.discount_percentage,
+        discount_amount: order.discount_amount,
+        after_discount: order.after_discount,
+        special_discount_percentage: order.special_discount_percentage,
+        special_discount_amount: order.special_discount_amount,
+        after_special_discount: order.after_special_discount,
+        packing_percentage: order.packing_percentage,
+        packing_amount: order.packing_amount,
+        net_amount: order.net_amount,
         status: normalizeStatus(order.status),
         customer_status: CUSTOMER_STATUS_MAP[order.status] || CUSTOMER_STATUS_MAP[normalizeStatus(order.status)] || order.status,
         created_at: order.created_at,

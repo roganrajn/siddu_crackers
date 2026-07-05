@@ -38,18 +38,20 @@
               <table role="presentation" width="100%" style="border-collapse:collapse;margin-bottom:20px;font-size:14px;">
                 <thead>
                   <tr style="background:#FDF8F0;">
+                    <th style="padding:12px;text-align:center;color:#7D3C5E;">S.No</th>
                     <th style="padding:12px;text-align:left;color:#7D3C5E;">Product</th>
+                    <th style="padding:12px;text-align:center;color:#7D3C5E;">MRP ₹</th>
                     <th style="padding:12px;text-align:center;color:#7D3C5E;">Qty</th>
-                    <th style="padding:12px;text-align:right;color:#7D3C5E;">Subtotal</th>
+                    <th style="padding:12px;text-align:right;color:#7D3C5E;">Total ₹</th>
                   </tr>
                 </thead>
                 <tbody>{{ITEMS_ROWS}}</tbody>
               </table>
 
-              <div style="background:linear-gradient(135deg,#FDF8F0,#FFF5E8);border-radius:12px;padding:16px 20px;text-align:right;margin-bottom:28px;border:1px solid rgba(232,184,74,0.3);">
-                <span style="font-size:14px;color:#6B5A62;">Grand Total</span>
-                <span style="font-size:28px;font-weight:800;color:#7D3C5E;margin-left:12px;">{{GRAND_TOTAL}}</span>
-              </div>
+              <h2 style="margin:0 0 12px;color:#7D3C5E;font-size:16px;border-bottom:3px solid #E8B84A;padding-bottom:8px;">Summary</h2>
+              <table role="presentation" width="100%" style="border-collapse:collapse;margin-bottom:28px;font-size:14px;max-width:360px;margin-left:auto;">
+                <tbody>{{SUMMARY_ROWS}}</tbody>
+              </table>
 
               <p style="margin:0 0 24px;font-size:15px;color:#2A1520;line-height:1.6;">We will contact you shortly to confirm your order.</p>
 

@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { sendOrderEmails } from './email.service.js';
+import { calculateOrderBreakdown, normalizeOrderSettings } from '../utils/orderPricing.js';
 
 const VALID_STATUSES = ['new', 'confirmed', 'cancelled'];
 
@@ -107,6 +108,49 @@ async function createNotification(type, title, message, referenceId) {
   }
 }
 
+async function getOrderSettings(client) {
+  const result = await client.query(
+    `SELECT min_order_amount, order_packing_percentage
+     FROM website_settings ORDER BY id LIMIT 1`
+  );
+  return normalizeOrderSettings(result.rows[0] || {});
+}
+
+async function resolveOrderItems(client, items) {
+  const resolved = [];
+
+  for (const item of items) {
+    const quantity = parseInt(item.quantity, 10);
+    let mrpPrice = parseFloat(item.mrp_price ?? item.original_price);
+    let offerPrice = parseFloat(item.price);
+
+    if (item.product_id) {
+      const productResult = await client.query(
+        'SELECT original_price, offer_price, name FROM products WHERE id = $1',
+        [item.product_id]
+      );
+      if (productResult.rows[0]) {
+        mrpPrice = parseFloat(productResult.rows[0].original_price);
+        offerPrice = parseFloat(productResult.rows[0].offer_price);
+      }
+    }
+
+    if (!mrpPrice || mrpPrice < 0) mrpPrice = offerPrice;
+    if (!offerPrice || offerPrice < 0) offerPrice = mrpPrice;
+
+    resolved.push({
+      product_id: item.product_id || null,
+      product_name: item.product_name,
+      mrp_price: mrpPrice,
+      price: offerPrice,
+      quantity,
+      subtotal: Math.round(offerPrice * quantity * 100) / 100,
+    });
+  }
+
+  return resolved;
+}
+
 function validateOrderInput(body) {
   const { customer_name, phone, state, city, address, pincode, items } = body;
   const errors = [];
@@ -148,19 +192,30 @@ export async function createOrder(orderData) {
   try {
     await client.query('BEGIN');
 
-    const orderNumber = await generateOrderNumber(client);
-    let totalAmount = 0;
-    const orderItems = [];
+    const orderSettings = await getOrderSettings(client);
+    const orderItems = await resolveOrderItems(client, items);
+    const breakdown = calculateOrderBreakdown(orderItems, orderSettings);
 
-    for (const item of items) {
-      const subtotal = parseFloat(item.price) * parseInt(item.quantity, 10);
-      totalAmount += subtotal;
-      orderItems.push({ ...item, subtotal });
+    if (breakdown.net_amount < breakdown.min_order_amount) {
+      const err = new Error(
+        `Minimum order amount is ₹${breakdown.min_order_amount.toFixed(2)}. Your order total is ₹${breakdown.net_amount.toFixed(2)}.`
+      );
+      err.status = 400;
+      throw err;
     }
 
+    const orderNumber = await generateOrderNumber(client);
+
     const orderResult = await client.query(
-      `INSERT INTO orders (order_number, customer_name, phone, whatsapp, email, state, city, address, pincode, remarks, total_amount, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'new') RETURNING *`,
+      `INSERT INTO orders (
+        order_number, customer_name, phone, whatsapp, email, state, city, address, pincode, remarks,
+        total_amount, subtotal_mrp, discount_percentage, discount_amount, after_discount,
+        special_discount_percentage, special_discount_amount, after_special_discount,
+        packing_percentage, packing_amount, net_amount, status
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'new'
+      ) RETURNING *`,
       [
         orderNumber,
         customer_name.trim(),
@@ -172,7 +227,17 @@ export async function createOrder(orderData) {
         address.trim(),
         pincode.trim(),
         remarks?.trim() || null,
-        totalAmount,
+        breakdown.net_amount,
+        breakdown.subtotal_mrp,
+        breakdown.discount_percentage,
+        breakdown.discount_amount,
+        breakdown.after_discount,
+        breakdown.special_discount_percentage,
+        breakdown.special_discount_amount,
+        breakdown.after_special_discount,
+        breakdown.packing_percentage,
+        breakdown.packing_amount,
+        breakdown.net_amount,
       ]
     );
 
@@ -180,9 +245,9 @@ export async function createOrder(orderData) {
 
     for (const item of orderItems) {
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, price, quantity, subtotal)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [order.id, item.product_id, item.product_name, item.price, item.quantity, item.subtotal]
+        `INSERT INTO order_items (order_id, product_id, product_name, mrp_price, price, quantity, subtotal)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [order.id, item.product_id, item.product_name, item.mrp_price, item.price, item.quantity, item.subtotal]
       );
     }
 
@@ -197,11 +262,11 @@ export async function createOrder(orderData) {
     createNotification(
       'order',
       `New Order #${orderNumber}`,
-      `${customer_name} - ₹${totalAmount}`,
+      `${customer_name} - ₹${breakdown.net_amount}`,
       order.id
     );
 
-    return { order, items: orderItems };
+    return { order, items: orderItems, breakdown };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

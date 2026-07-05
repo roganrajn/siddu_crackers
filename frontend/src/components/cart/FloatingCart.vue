@@ -56,12 +56,21 @@
 
           <div v-if="cartStore.items.length" class="cart-drawer__footer">
             <div class="cart-drawer__subtotal">
-              <span>Subtotal</span>
+              <span>Net Amount</span>
               <strong>{{ formatPrice(cartStore.total) }}</strong>
             </div>
-            <router-link to="/checkout" class="btn btn--large" @click="cartStore.closeDrawer()">
+            <p v-if="!cartStore.meetsMinOrder" class="cart-drawer__min">
+              Min order {{ formatPrice(cartStore.pricing.min_order_amount) }}
+            </p>
+            <router-link
+              v-if="cartStore.meetsMinOrder"
+              to="/checkout"
+              class="btn btn--large"
+              @click="cartStore.closeDrawer()"
+            >
               Proceed to Checkout
             </router-link>
+            <button v-else class="btn btn--large" disabled>Minimum order not met</button>
           </div>
         </aside>
       </Transition>
@@ -204,6 +213,12 @@ const cartStore = useCartStore();
     font-size: 1.1rem;
 
     strong { color: $primary; font-size: 1.3rem; }
+  }
+
+  &__min {
+    margin: -8px 0 12px;
+    font-size: 0.82rem;
+    color: #c2410c;
   }
 }
 

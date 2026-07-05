@@ -1,10 +1,34 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { calculateOrderBreakdown } from '@/utils/orderPricing';
 
 const CART_KEY = 'siddu_cart';
 
 export const useCartStore = defineStore('cart', () => {
-  const items = ref(JSON.parse(localStorage.getItem(CART_KEY) || '[]'));
+  function normalizeCartItem(item) {
+    const price = parseFloat(item.price);
+    const mrpRaw = item.mrp_price ?? item.original_price;
+    const normalized = { ...item, price };
+
+    if (mrpRaw != null && !Number.isNaN(parseFloat(mrpRaw))) {
+      const mrp = parseFloat(mrpRaw);
+      normalized.mrp_price = mrp;
+      normalized.original_price = parseFloat(item.original_price ?? mrp);
+    }
+
+    return normalized;
+  }
+
+  function applyProductToItem(item, product) {
+    item.product_name = product.name;
+    item.mrp_price = parseFloat(product.original_price);
+    item.original_price = parseFloat(product.original_price);
+    item.price = parseFloat(product.offer_price);
+    if (product.image_url) item.image_url = product.image_url;
+  }
+
+  const items = ref(JSON.parse(localStorage.getItem(CART_KEY) || '[]').map(normalizeCartItem));
   const isOpen = ref(false);
   const justAdded = ref(null);
 
@@ -13,16 +37,42 @@ export const useCartStore = defineStore('cart', () => {
   }, { deep: true });
 
   const itemCount = computed(() => items.value.reduce((sum, i) => sum + i.quantity, 0));
-  const total = computed(() => items.value.reduce((sum, i) => sum + i.price * i.quantity, 0));
+
+  const pricing = computed(() => {
+    const settingsStore = useSettingsStore();
+    return calculateOrderBreakdown(items.value, settingsStore.settings);
+  });
+
+  const total = computed(() => pricing.value.net_amount);
+  const subtotalMrp = computed(() => pricing.value.subtotal_mrp);
+
+  const meetsMinOrder = computed(() => pricing.value.net_amount >= pricing.value.min_order_amount);
+
+  const minOrderRemaining = computed(() =>
+    Math.max(0, pricing.value.min_order_amount - pricing.value.net_amount)
+  );
+
+  function syncWithCatalog(products = []) {
+    if (!products.length) return;
+
+    const byId = new Map(products.map((p) => [p.id, p]));
+    for (const item of items.value) {
+      const product = byId.get(item.product_id);
+      if (product) applyProductToItem(item, product);
+    }
+  }
 
   function addItem(product) {
     const existing = items.value.find(i => i.product_id === product.id);
     if (existing) {
       existing.quantity++;
+      applyProductToItem(existing, product);
     } else {
       items.value.push({
         product_id: product.id,
         product_name: product.name,
+        mrp_price: parseFloat(product.original_price),
+        original_price: parseFloat(product.original_price),
         price: parseFloat(product.offer_price),
         image_url: product.image_url,
         quantity: 1,
@@ -60,5 +110,23 @@ export const useCartStore = defineStore('cart', () => {
     isOpen.value = false;
   }
 
-  return { items, isOpen, justAdded, itemCount, total, addItem, removeItem, updateQuantity, clearCart, toggleDrawer, openDrawer, closeDrawer };
+  return {
+    items,
+    isOpen,
+    justAdded,
+    itemCount,
+    total,
+    subtotalMrp,
+    pricing,
+    meetsMinOrder,
+    minOrderRemaining,
+    addItem,
+    syncWithCatalog,
+    removeItem,
+    updateQuantity,
+    clearCart,
+    toggleDrawer,
+    openDrawer,
+    closeDrawer,
+  };
 });

@@ -5,6 +5,12 @@ import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import pool from '../config/db.js';
 import { buildWhatsAppLink } from './whatsapp.service.js';
+import {
+  calculateOrderBreakdown,
+  getItemMrp,
+  getItemOffer,
+  getStoredOrderBreakdown,
+} from '../utils/orderPricing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -79,23 +85,72 @@ function renderTemplate(template, vars) {
   );
 }
 
-function buildItemsRowsAdmin(items) {
-  return items.map((item) => `
+function hasOfferDiscount(item) {
+  return getItemMrp(item) > getItemOffer(item);
+}
+
+function getLineOfferTotal(item) {
+  const qty = parseInt(item.quantity, 10);
+  return parseFloat(item.subtotal ?? getItemOffer(item) * qty);
+}
+
+function buildMrpCellHtml(item) {
+  const offer = getItemOffer(item);
+  if (hasOfferDiscount(item)) {
+    return `
+      <span style="display:block;font-size:12px;color:#6B5A62;text-decoration:line-through;">${formatCurrency(getItemMrp(item))}</span>
+      <span style="display:block;font-weight:700;color:#7D3C5E;">${formatCurrency(offer)}</span>`;
+  }
+  return `<span style="display:block;font-weight:700;color:#7D3C5E;">${formatCurrency(offer)}</span>`;
+}
+
+function buildItemsRows(items) {
+  return items.map((item, index) => `
     <tr>
+      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:center;">${index + 1}</td>
       <td style="padding:12px;border-bottom:1px solid #EDE4DC;color:#2A1520;">${item.product_name}</td>
+      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:center;">${buildMrpCellHtml(item)}</td>
       <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:center;">${item.quantity}</td>
-      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:right;">${formatCurrency(item.price)}</td>
-      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:right;font-weight:700;">${formatCurrency(item.subtotal)}</td>
+      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:right;font-weight:700;color:#7D3C5E;">${formatCurrency(getLineOfferTotal(item))}</td>
     </tr>`).join('');
 }
 
-function buildItemsRowsCustomer(items) {
-  return items.map((item) => `
+function formatPct(value) {
+  const num = parseFloat(value);
+  if (Number.isNaN(num)) return '0%';
+  return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2).replace(/\.?0+$/, '')}%`;
+}
+
+function resolveOrderBreakdown(order, items, settings) {
+  return getStoredOrderBreakdown(order) || calculateOrderBreakdown(items, settings);
+}
+
+function buildSummaryRows(order, items, settings) {
+  const breakdown = resolveOrderBreakdown(order, items, settings);
+  const discountLabel = breakdown.discount_label
+    || (breakdown.discount_upto_percentage ? `Upto ${breakdown.discount_upto_percentage}% discount` : 'Discount');
+
+  return `
     <tr>
-      <td style="padding:12px;border-bottom:1px solid #EDE4DC;color:#2A1520;">${item.product_name}</td>
-      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:center;">${item.quantity}</td>
-      <td style="padding:12px;border-bottom:1px solid #EDE4DC;text-align:right;font-weight:600;">${formatCurrency(item.subtotal)}</td>
-    </tr>`).join('');
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">Sub Total</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">${formatCurrency(breakdown.subtotal_mrp)}</td>
+    </tr>
+    <tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">${discountLabel}</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;color:#b91c1c;">-${formatCurrency(breakdown.discount_amount)}</td>
+    </tr>
+    <tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">After Discount</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">${formatCurrency(breakdown.after_discount)}</td>
+    </tr>
+    <tr>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">Packing (${formatPct(breakdown.packing_percentage)})</td>
+      <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">${formatCurrency(breakdown.packing_amount)}</td>
+    </tr>
+    <tr style="background:#7D3C5E;color:#ffffff;">
+      <td style="padding:12px;font-weight:700;border-bottom:1px solid #7D3C5E;">Net Amount</td>
+      <td style="padding:12px;font-weight:700;text-align:right;border-bottom:1px solid #7D3C5E;">${formatCurrency(breakdown.net_amount)}</td>
+    </tr>`;
 }
 
 function getBrandName(settings) {
@@ -173,8 +228,8 @@ export async function sendAdminOrderEmail(order, items) {
       REMARKS_ROW: order.remarks
         ? `<tr><td style="padding:8px 0;color:#6B5A62;">Remarks</td><td style="padding:8px 0;">${order.remarks}</td></tr>`
         : '',
-      ITEMS_ROWS: buildItemsRowsAdmin(items),
-      GRAND_TOTAL: formatCurrency(order.total_amount),
+      ITEMS_ROWS: buildItemsRows(items),
+      SUMMARY_ROWS: buildSummaryRows(order, items, settings),
       CALL_CUSTOMER_LINK: `tel:${getCustomerPhoneRaw(order.phone)}`,
       WHATSAPP_CUSTOMER_LINK: getCustomerWaLink(order),
       COMPANY_NAME: getBrandName(settings),
@@ -219,8 +274,8 @@ export async function sendCustomerOrderEmail(order, items) {
       COMPANY_NAME: getBrandName(settings),
       ORDER_NUMBER: order.order_number,
       ORDER_DATE: formatDate(order.created_at || new Date()),
-      ITEMS_ROWS: buildItemsRowsCustomer(items),
-      GRAND_TOTAL: formatCurrency(order.total_amount),
+      ITEMS_ROWS: buildItemsRows(items),
+      SUMMARY_ROWS: buildSummaryRows(order, items, settings),
       BUSINESS_PHONE: businessPhone,
       BUSINESS_WHATSAPP: businessWhatsapp,
       PHONE_RAW: businessPhone.replace(/\s/g, ''),

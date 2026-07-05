@@ -24,5 +24,26 @@ export async function ensureSchema() {
     WHERE status IN ('packed', 'completed');
   `);
 
+  await pool.query(`
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS min_order_amount DECIMAL(10, 2) DEFAULT 5000;
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_discount_percentage DECIMAL(5, 2) DEFAULT 70;
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_special_discount_percentage DECIMAL(5, 2) DEFAULT 15;
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_packing_percentage DECIMAL(5, 2) DEFAULT 5;
+  `);
+
+  await pool.query(`
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_mrp DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_percentage DECIMAL(5, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS after_discount DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS special_discount_percentage DECIMAL(5, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS special_discount_amount DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS after_special_discount DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS packing_percentage DECIMAL(5, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS packing_amount DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS net_amount DECIMAL(10, 2);
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS mrp_price DECIMAL(10, 2);
+  `);
+
   console.log('[db] Schema check complete');
 }

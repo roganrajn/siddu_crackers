@@ -19,7 +19,7 @@
       <h3 class="product-card__name">{{ product.name }}</h3>
       <div class="product-card__pricing">
         <span class="product-card__offer">{{ formatPrice(product.offer_price) }}</span>
-        <span class="product-card__original">{{ formatPrice(product.original_price) }}</span>
+        <span v-if="showMrp" class="product-card__original">{{ formatPrice(product.original_price) }}</span>
       </div>
       <button
         class="btn btn--sm product-card__btn"
@@ -42,6 +42,10 @@ const props = defineProps({
 });
 
 defineEmits(['click']);
+
+const showMrp = computed(() =>
+  parseFloat(props.product.original_price) > parseFloat(props.product.offer_price)
+);
 
 const cartStore = useCartStore();
 const justAdded = computed(() => cartStore.justAdded === props.product.id);
@@ -126,7 +130,7 @@ function handleAdd() {
 
   &__offer {
     font-size: 1.2rem;
-    font-weight: 700;
+    font-weight: 800;
     color: $primary;
   }
 

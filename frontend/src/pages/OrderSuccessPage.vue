@@ -25,12 +25,13 @@
           </div>
         </div>
 
-        <div v-if="orderItems.length" class="order-summary">
+        <div v-if="orderItems.length || orderBreakdown" class="order-summary">
           <h3>Order Summary</h3>
-          <div v-for="item in orderItems" :key="item.product_id || item.product_name" class="summary-row">
-            <span>{{ item.product_name }} × {{ item.quantity }}</span>
-            <span>{{ formatPrice(item.subtotal || item.price * item.quantity) }}</span>
-          </div>
+          <OrderPricingTables
+            :items="orderItems"
+            :breakdown="orderBreakdown"
+            :fallback-total="orderTotal"
+          />
         </div>
 
         <p class="response-time">
@@ -73,6 +74,8 @@ import { ref, computed } from 'vue';
 import { useOrderStore } from '@/stores/orderStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { formatPrice, getPhoneLink, getWhatsAppLink, getOrderWhatsAppMessage } from '@/utils/helpers';
+import { getStoredOrderBreakdown } from '@/utils/orderPricing';
+import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 import { openWhatsApp } from '@/services/whatsapp.service';
 
 const orderStore = useOrderStore();
@@ -87,7 +90,8 @@ const hasOrder = computed(() => !!orderData.value?.order || !!orderData.value?.o
 const order = computed(() => orderData.value?.order || orderData.value);
 const orderItems = computed(() => orderData.value?.items || []);
 const orderNum = computed(() => order.value?.order_number || '');
-const orderTotal = computed(() => order.value?.total_amount || 0);
+const orderTotal = computed(() => order.value?.net_amount || order.value?.total_amount || 0);
+const orderBreakdown = computed(() => getStoredOrderBreakdown(order.value));
 const customerName = computed(() => order.value?.customer_name || '');
 const customerPhone = computed(() => order.value?.phone || '');
 

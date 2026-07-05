@@ -38,7 +38,7 @@
             <option v-for="s in ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
         </p>
-        <p><strong>Total:</strong> <span class="total">{{ formatPrice(order.total_amount) }}</span></p>
+        <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(order.net_amount || order.total_amount) }}</span></p>
       </div>
     </div>
 
@@ -95,25 +95,11 @@
 
     <div class="detail-card items-card">
       <h3>Order Items</h3>
-      <table class="admin-table items-table">
-        <thead>
-          <tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in items" :key="item.id">
-            <td>{{ item.product_name }}</td>
-            <td>{{ formatPrice(item.price) }}</td>
-            <td>{{ item.quantity }}</td>
-            <td>{{ formatPrice(item.subtotal) }}</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3"><strong>Grand Total</strong></td>
-            <td><strong>{{ formatPrice(order.total_amount) }}</strong></td>
-          </tr>
-        </tfoot>
-      </table>
+      <OrderPricingTables
+        :items="items"
+        :breakdown="orderBreakdown"
+        :fallback-total="order.total_amount"
+      />
     </div>
   </div>
 </template>
@@ -124,6 +110,8 @@ import { useRoute } from 'vue-router';
 import { useOrderStore } from '@/stores/orderStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getEffectivePaymentMethod, getPaymentMethodLabel } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
+import { getStoredOrderBreakdown } from '@/utils/orderPricing';
+import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 
 const route = useRoute();
 const orderStore = useOrderStore();
@@ -164,6 +152,8 @@ const formattedDate = computed(() =>
       })
     : ''
 );
+
+const orderBreakdown = computed(() => (order.value ? getStoredOrderBreakdown(order.value) : null));
 
 onMounted(async () => {
   const data = await orderStore.fetchOrder(route.params.id);

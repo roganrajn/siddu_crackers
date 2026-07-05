@@ -26,8 +26,11 @@
     <div class="product-card__body">
       <h3 class="product-card__name">{{ product.name }}</h3>
       <div class="product-card__pricing">
-        <span class="product-card__original">{{ formatPrice(product.original_price) }}</span>
         <span class="product-card__offer">{{ formatPrice(product.offer_price) }}</span>
+        <span
+          v-if="showMrp"
+          class="product-card__original"
+        >{{ formatPrice(product.original_price) }}</span>
       </div>
 
       <CartQuantityControl
@@ -61,7 +64,9 @@ const justAdded = computed(() => cartStore.justAdded === props.product.id);
 const cartQty = computed(() =>
   cartStore.items.find(i => i.product_id === props.product.id)?.quantity || 0
 );
-
+const showMrp = computed(() =>
+  parseFloat(props.product.original_price) > parseFloat(props.product.offer_price)
+);
 const topTags = computed(() => {
   const tags = [...(props.product.tags || [])];
   if (props.product.is_best_seller && !tags.includes('best_seller')) tags.unshift('best_seller');

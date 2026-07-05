@@ -33,7 +33,7 @@
 
           <div class="result-details">
             <p><strong>Customer:</strong> {{ result.order.customer_name }}</p>
-            <p><strong>Total:</strong> {{ formatPrice(result.order.total_amount) }}</p>
+            <p><strong>Total:</strong> {{ formatPrice(result.order.net_amount || result.order.total_amount) }}</p>
             <p><strong>Placed:</strong> {{ new Date(result.order.created_at).toLocaleString('en-IN') }}</p>
           </div>
 
@@ -50,11 +50,12 @@
           </div>
 
           <div class="result-items">
-            <h3>Items</h3>
-            <div v-for="item in result.order.items" :key="item.product_name" class="item-row">
-              <span>{{ item.product_name }} × {{ item.quantity }}</span>
-              <span>{{ formatPrice(item.subtotal) }}</span>
-            </div>
+            <h3>Order Details</h3>
+            <OrderPricingTables
+              :items="result.order.items"
+              :breakdown="trackBreakdown"
+              :fallback-total="result.order.total_amount"
+            />
           </div>
         </div>
       </div>
@@ -63,15 +64,21 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useOrderStore } from '@/stores/orderStore';
 import { formatPrice } from '@/utils/helpers';
+import { getStoredOrderBreakdown } from '@/utils/orderPricing';
+import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 
 const orderStore = useOrderStore();
 const loading = ref(false);
 const error = ref('');
 const result = ref(null);
 const form = ref({ order_number: '', phone: '' });
+
+const trackBreakdown = computed(() =>
+  result.value?.order ? getStoredOrderBreakdown(result.value.order) : null
+);
 
 async function handleTrack() {
   loading.value = true;

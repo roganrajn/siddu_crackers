@@ -60,10 +60,15 @@
           </div>
 
           <div class="form-submit">
-            <button type="submit" class="btn btn--large" :disabled="submitting">
+            <button type="submit" class="btn btn--large" :disabled="submitting || !cartStore.meetsMinOrder">
               {{ submitting ? 'Placing Order...' : '🎆 Submit Order' }}
             </button>
           </div>
+
+          <p v-if="!cartStore.meetsMinOrder" class="min-order-warning">
+            Minimum order is {{ formatPrice(cartStore.pricing.min_order_amount) }}.
+            Add {{ formatPrice(cartStore.minOrderRemaining) }} more to continue.
+          </p>
 
           <p v-if="error" class="error-msg">{{ error }}</p>
         </form>
@@ -81,21 +86,7 @@
 
           <div class="order-summary__body" :class="{ open: summaryOpen }">
             <h2 class="order-summary__title">Order Summary</h2>
-            <div v-for="item in cartStore.items" :key="item.product_id" class="summary-item">
-              <div class="summary-item__thumb">
-                <img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" loading="lazy" />
-                <span v-else>🎆</span>
-              </div>
-              <div class="summary-item__info">
-                <span class="summary-item__name">{{ item.product_name }} × {{ item.quantity }}</span>
-                <span class="summary-item__unit">{{ formatPrice(item.price) }} / pc</span>
-              </div>
-              <span class="summary-item__total">{{ formatPrice(item.price * item.quantity) }}</span>
-            </div>
-            <div class="summary-total">
-              <span>Total</span>
-              <strong>{{ formatPrice(cartStore.total) }}</strong>
-            </div>
+            <OrderPricingTables :items="cartStore.items" :breakdown="cartStore.pricing" />
           </div>
         </div>
       </div>
@@ -109,6 +100,7 @@ import { useRouter } from 'vue-router';
 import { useCartStore } from '@/stores/cartStore';
 import { useOrderStore } from '@/stores/orderStore';
 import { formatPrice, INDIAN_STATES } from '@/utils/helpers';
+import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 
 const router = useRouter();
 const cartStore = useCartStore();
@@ -145,6 +137,7 @@ async function handleSubmit() {
       items: cartStore.items.map(i => ({
         product_id: i.product_id,
         product_name: i.product_name,
+        mrp_price: i.mrp_price || i.original_price || i.price,
         price: i.price,
         quantity: i.quantity,
       })),
@@ -312,6 +305,16 @@ async function handleSubmit() {
   color: #ef4444;
   margin-top: 12px;
   text-align: center;
+}
+
+.min-order-warning {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: $radius-sm;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 768px) {

@@ -14,6 +14,7 @@
         <div class="cart-actions-top">
           <router-link to="/" class="btn btn--outline btn--sm">← Continue Shopping</router-link>
         </div>
+
         <div class="cart-items">
           <div v-for="item in cartStore.items" :key="item.product_id" class="cart-row">
             <div class="cart-row__image">
@@ -22,7 +23,10 @@
             </div>
             <div class="cart-row__info">
               <h3>{{ item.product_name }}</h3>
-              <p>{{ formatPrice(item.price) }} each</p>
+              <div class="cart-row__pricing">
+                <span class="cart-row__offer">{{ formatPrice(item.price) }}</span>
+                <span v-if="item.mrp_price > item.price" class="cart-row__mrp">{{ formatPrice(item.mrp_price) }}</span>
+              </div>
             </div>
             <div class="cart-row__qty">
               <button @click="cartStore.updateQuantity(item.product_id, item.quantity - 1)">−</button>
@@ -36,15 +40,21 @@
 
         <div class="cart-summary">
           <h3>Order Summary</h3>
-          <div class="summary-row">
-            <span>Items ({{ cartStore.itemCount }})</span>
-            <span>{{ formatPrice(cartStore.total) }}</span>
-          </div>
-          <div class="summary-total">
-            <span>Total</span>
-            <strong>{{ formatPrice(cartStore.total) }}</strong>
-          </div>
-          <router-link to="/checkout" class="btn btn--large">Proceed to Checkout</router-link>
+          <OrderPricingTables :items="cartStore.items" :breakdown="cartStore.pricing" />
+
+          <p v-if="!cartStore.meetsMinOrder" class="min-order-warning">
+            Add {{ formatPrice(cartStore.minOrderRemaining) }} more to reach minimum order of
+            {{ formatPrice(cartStore.pricing.min_order_amount) }}.
+          </p>
+
+          <router-link
+            v-if="cartStore.meetsMinOrder"
+            to="/checkout"
+            class="btn btn--large"
+          >
+            Proceed to Checkout
+          </router-link>
+          <button v-else class="btn btn--large" disabled>Minimum order not met</button>
           <button class="btn btn--outline btn--large" @click="cartStore.clearCart()">Clear Cart</button>
           <router-link to="/" class="btn btn--secondary btn--large">Continue Shopping</router-link>
         </div>
@@ -56,6 +66,7 @@
 <script setup>
 import { useCartStore } from '@/stores/cartStore';
 import { formatPrice } from '@/utils/helpers';
+import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 
 const cartStore = useCartStore();
 </script>
@@ -80,7 +91,7 @@ const cartStore = useCartStore();
 
 .cart-content {
   display: grid;
-  grid-template-columns: 1fr 350px;
+  grid-template-columns: 1fr 420px;
   gap: 32px;
   align-items: start;
 }
@@ -110,7 +121,23 @@ const cartStore = useCartStore();
   &__info {
     flex: 1;
     h3 { font-size: 1rem; margin-bottom: 4px; }
-    p { color: $text-muted; font-size: 0.85rem; }
+  }
+
+  &__pricing {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  &__offer {
+    font-weight: 700;
+    color: $primary;
+  }
+
+  &__mrp {
+    font-size: 0.82rem;
+    color: $text-muted;
+    text-decoration: line-through;
   }
 
   &__qty {
@@ -155,26 +182,17 @@ const cartStore = useCartStore();
   top: calc($header-height + 20px);
 
   h3 { margin-bottom: 20px; }
+  .btn { margin-top: 12px; }
+}
 
-  .summary-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 12px;
-    color: $text-muted;
-  }
-
-  .summary-total {
-    display: flex;
-    justify-content: space-between;
-    padding: 16px 0;
-    border-top: 2px solid $border;
-    margin-bottom: 20px;
-    font-size: 1.1rem;
-
-    strong { color: $primary; font-size: 1.4rem; }
-  }
-
-  .btn { margin-bottom: 12px; }
+.min-order-warning {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: $radius-sm;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 @media (max-width: 768px) {
