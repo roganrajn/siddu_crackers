@@ -66,9 +66,7 @@ function handleAdd() {
   }
 
   &__image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    @include image-cover;
     transition: transform 0.4s ease;
   }
 

@@ -3,19 +3,10 @@
     <HeroSlider />
     <SpecialOffers />
 
-    <section id="categories" class="categories-section">
-      <div class="container">
-        <h2 class="section-title">Popular Categories</h2>
-        <div class="categories-grid">
-          <CategoryCard
-            v-for="cat in categoriesWithProducts"
-            :key="cat.id"
-            :category="cat"
-            @select="scrollToCategory"
-          />
-        </div>
-      </div>
-    </section>
+    <PopularCategories
+      :categories="categoriesWithProducts"
+      @select="scrollToCategory"
+    />
 
     <StickyCategoryBar
       :categories="categoriesWithProducts"
@@ -66,11 +57,11 @@ import { useProductStore } from '@/stores/productStore';
 import { useUiStore } from '@/stores/uiStore';
 import HeroSlider from '@/components/home/HeroSlider.vue';
 import SpecialOffers from '@/components/home/SpecialOffers.vue';
+import PopularCategories from '@/components/home/PopularCategories.vue';
 import BestSellers from '@/components/home/BestSellers.vue';
 import WhyUs from '@/components/home/WhyUs.vue';
 import ReviewsSection from '@/components/home/ReviewsSection.vue';
 import FaqSection from '@/components/home/FaqSection.vue';
-import CategoryCard from '@/components/category/CategoryCard.vue';
 import StickyCategoryBar from '@/components/categories/StickyCategoryBar.vue';
 import CategoryProductSection from '@/components/products/CategoryProductSection.vue';
 import ProductFilters from '@/components/product/ProductFilters.vue';
@@ -175,17 +166,6 @@ onUnmounted(() => window.removeEventListener('scroll', handlePageScroll));
 </script>
 
 <style lang="scss" scoped>
-.categories-section {
-  padding: 40px 0 28px;
-  background: linear-gradient(180deg, rgba(253,248,240,0.3) 0%, transparent 100%);
-}
-
-.categories-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 18px;
-}
-
 .products-section {
   padding: 32px 0 48px;
 }

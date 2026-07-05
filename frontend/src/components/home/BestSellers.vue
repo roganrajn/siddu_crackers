@@ -3,12 +3,17 @@
     <div class="container">
       <h2 class="section-title">Best Sellers</h2>
       <div class="products-grid">
-        <ProductCard
-          v-for="product in products"
+        <div
+          v-for="(product, index) in products"
           :key="product.id"
-          :product="product"
-          @quick-view="uiStore.openQuickView($event)"
-        />
+          v-scroll-reveal="index * 80"
+          class="products-grid__item"
+        >
+          <ProductCard
+            :product="product"
+            @quick-view="uiStore.openQuickView($event)"
+          />
+        </div>
       </div>
     </div>
   </section>
@@ -38,5 +43,9 @@ const products = computed(() =>
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 22px;
+
+  &__item {
+    min-width: 0;
+  }
 }
 </style>

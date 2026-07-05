@@ -1,5 +1,9 @@
 <template>
-  <section class="hero-slider" aria-label="Featured offers">
+  <section
+    ref="sliderEl"
+    class="hero-slider"
+    aria-label="Featured offers"
+  >
     <div class="hero-slider__track" :style="{ transform: `translateX(-${current * 100}%)` }">
       <div
         v-for="(slide, i) in slides"
@@ -76,13 +80,22 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useBannerStore } from '@/stores/bannerStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { DEFAULT_BANNER_IMAGES, DEFAULT_HERO_SLIDES } from '@/constants/banners';
+import { useTouchSwipe } from '@/composables/useTouchSwipe';
 
 const bannerStore = useBannerStore();
 const settingsStore = useSettingsStore();
 
 const current = ref(0);
 const loadedImages = ref(new Set());
+const sliderEl = ref(null);
 let timer = null;
+
+const touch = useTouchSwipe(
+  () => { next(); resetTimer(); },
+  () => { prev(); resetTimer(); }
+);
+
+let unbindTouch = null;
 
 const slides = computed(() => {
   let raw = bannerStore.banners.length ? [...bannerStore.banners] : [...DEFAULT_HERO_SLIDES];
@@ -152,6 +165,7 @@ watch(current, () => {
 });
 
 onMounted(async () => {
+  unbindTouch = touch.bind(sliderEl.value);
   await bannerStore.fetchBanners();
   const first = slides.value[0];
   if (first?.image_url) {
@@ -162,7 +176,10 @@ onMounted(async () => {
   timer = setInterval(next, 5500);
 });
 
-onUnmounted(() => clearInterval(timer));
+onUnmounted(() => {
+  clearInterval(timer);
+  unbindTouch?.();
+});
 </script>
 
 <style lang="scss" scoped>
@@ -171,6 +188,7 @@ onUnmounted(() => clearInterval(timer));
   overflow: hidden;
   min-height: clamp(420px, 58vh, 620px);
   margin-top: -1px;
+  touch-action: pan-y pinch-zoom;
 
   &__track {
     display: flex;
@@ -217,13 +235,17 @@ onUnmounted(() => clearInterval(timer));
     backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.3);
     color: $white;
-    font-size: 2rem;
-    width: 52px;
-    height: 52px;
+    font-size: 1.35rem;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     cursor: pointer;
     z-index: 4;
     transition: $transition;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0 2px;
 
     &:hover {
       background: rgba(255,255,255,0.3);
@@ -231,8 +253,8 @@ onUnmounted(() => clearInterval(timer));
       color: $gold;
     }
 
-    &--prev { left: 20px; }
-    &--next { right: 20px; }
+    &--prev { left: 16px; }
+    &--next { right: 16px; }
   }
 
   &__scroll-hint {
@@ -378,7 +400,9 @@ onUnmounted(() => clearInterval(timer));
 }
 
 @media (max-width: 768px) {
-  .hero-slider__arrow { display: none; }
+  .hero-slider__arrow {
+    display: none;
+  }
 
   .hero-slide__text {
     padding: 32px 0 64px;

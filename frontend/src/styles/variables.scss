@@ -121,6 +121,17 @@ $font-display: 'Playfair Display', Georgia, serif;
   }
 }
 
+@mixin image-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  object-position: center;
+}
+
 // Legacy alias
 @mixin orange-gradient {
   @include brand-gradient;

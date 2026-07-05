@@ -8,12 +8,17 @@
       <span class="category-section__count">{{ products.length }} products</span>
     </div>
     <div v-if="products.length" class="category-section__grid">
-      <ProductCard
-        v-for="product in visibleProducts"
+      <div
+        v-for="(product, index) in visibleProducts"
         :key="product.id"
-        :product="product"
-        @quick-view="$emit('quick-view', $event)"
-      />
+        v-scroll-reveal="index * 80"
+        class="category-section__item"
+      >
+        <ProductCard
+          :product="product"
+          @quick-view="$emit('quick-view', $event)"
+        />
+      </div>
     </div>
     <div v-if="products.length > initialLimit" class="category-section__more">
       <button class="btn btn--outline" @click="expanded = !expanded">
@@ -59,6 +64,10 @@ const visibleProducts = computed(() =>
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 20px;
+  }
+
+  &__item {
+    min-width: 0;
   }
 
   &__more { text-align: center; margin-top: 24px; }

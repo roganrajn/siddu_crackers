@@ -2,12 +2,15 @@
   <a
     :href="`#category-${category.slug}`"
     class="category-card"
+    :class="{ 'category-card--compact': variant === 'compact' }"
     :style="{ '--cat-color': category.color || '#7D3C5E' }"
     @click.prevent="$emit('select', category)"
   >
-    <div class="category-card__visual">
-      <img v-if="category.banner_image" :src="category.banner_image" :alt="category.name" loading="lazy" />
-      <span v-else class="category-card__icon">{{ category.icon || '🎇' }}</span>
+    <div
+      class="category-card__visual"
+      :style="visualStyle"
+    >
+      <span v-if="!category.banner_image" class="category-card__icon">{{ category.icon || '🎇' }}</span>
       <div class="category-card__shine" aria-hidden="true" />
     </div>
     <h3 class="category-card__name">{{ category.name }}</h3>
@@ -15,8 +18,16 @@
 </template>
 
 <script setup>
-defineProps({ category: { type: Object, required: true } });
+import { computed } from 'vue';
+import { getCategoryVisualStyle } from '@/utils/categoryVisual.js';
+
+const props = defineProps({
+  category: { type: Object, required: true },
+  variant: { type: String, default: 'default' },
+});
 defineEmits(['select']);
+
+const visualStyle = computed(() => getCategoryVisualStyle(props.category));
 </script>
 
 <style lang="scss" scoped>
@@ -58,14 +69,12 @@ defineEmits(['select']);
   &__visual {
     position: relative;
     width: 100%;
-    height: 110px;
+    height: 120px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(145deg, var(--cat-color), color-mix(in srgb, var(--cat-color) 60%, white));
+    background-repeat: no-repeat;
     overflow: hidden;
-
-    img { width: 100%; height: 100%; object-fit: cover; }
   }
 
   &__icon {
@@ -94,6 +103,35 @@ defineEmits(['select']);
     position: relative;
     z-index: 1;
     letter-spacing: 0.01em;
+  }
+
+  &--compact {
+    width: 100%;
+    touch-action: pan-x;
+
+    .category-card__visual {
+      height: 74px;
+    }
+
+    .category-card__icon {
+      font-size: 1.75rem;
+    }
+
+    .category-card__name {
+      padding: 8px 6px 10px;
+      font-size: 0.72rem;
+      line-height: 1.25;
+      min-height: 2.5em;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    &:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 22px rgba(125, 60, 94, 0.14);
+    }
   }
 }
 </style>

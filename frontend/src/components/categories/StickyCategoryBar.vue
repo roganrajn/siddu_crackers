@@ -1,16 +1,22 @@
 <template>
   <div class="sticky-bar" :class="{ visible: isVisible }">
     <div class="sticky-bar__scroll">
-      <div class="container sticky-bar__inner">
+      <div class="sticky-bar__inner">
         <button
           v-for="cat in categories"
           :key="cat.id"
           class="sticky-bar__item"
           :class="{ active: activeSlug === cat.slug }"
+          :title="cat.name"
           @click="$emit('select', cat)"
         >
-          <span v-if="cat.icon" class="sticky-bar__icon">{{ cat.icon }}</span>
-          {{ cat.name }}
+          <span
+            class="sticky-bar__thumb"
+            :style="getCategoryVisualStyle(cat)"
+          >
+            <span v-if="!cat.banner_image" class="sticky-bar__icon">{{ cat.icon || '🎇' }}</span>
+          </span>
+          <span class="sticky-bar__label">{{ cat.name }}</span>
         </button>
       </div>
     </div>
@@ -18,6 +24,8 @@
 </template>
 
 <script setup>
+import { getCategoryVisualStyle } from '@/utils/categoryVisual.js';
+
 defineProps({
   categories: { type: Array, default: () => [] },
   activeSlug: { type: String, default: '' },
@@ -72,10 +80,10 @@ defineEmits(['select']);
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 10px 18px;
+    gap: 8px;
+    padding: 8px 14px 8px 8px;
     border: 2px solid $border;
-    border-radius: 25px;
+    border-radius: 999px;
     background: $white;
     font-size: 0.85rem;
     font-weight: 600;
@@ -83,19 +91,43 @@ defineEmits(['select']);
     color: $text-dark;
     cursor: pointer;
     transition: $transition;
-    white-space: nowrap;
+    max-width: 220px;
 
     &:hover,
     &.active {
       border-color: $primary;
       background: $primary;
       color: $white;
+
+      .sticky-bar__thumb {
+        border-color: rgba(255, 255, 255, 0.45);
+      }
     }
+  }
+
+  &__thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-repeat: no-repeat;
+    overflow: hidden;
+    border: 1px solid rgba(125, 60, 94, 0.12);
   }
 
   &__icon {
     font-size: 1rem;
     line-height: 1;
+  }
+
+  &__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 }
 
@@ -108,8 +140,14 @@ defineEmits(['select']);
     }
 
     &__item {
-      padding: 9px 14px;
+      padding: 7px 12px 7px 7px;
       font-size: 0.78rem;
+      max-width: 160px;
+    }
+
+    &__thumb {
+      width: 28px;
+      height: 28px;
     }
   }
 }
