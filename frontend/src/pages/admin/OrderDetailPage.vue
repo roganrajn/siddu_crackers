@@ -24,7 +24,7 @@
         <p v-if="order.remarks"><strong>Remarks:</strong> {{ order.remarks }}</p>
       </div>
 
-      <div class="detail-card">
+      <div class="detail-card detail-card--info">
         <h3>Order Info</h3>
         <p><strong>Date:</strong> {{ formattedDate }}</p>
         <p class="status-row">
@@ -39,99 +39,69 @@
           </select>
         </p>
         <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(order.net_amount || order.total_amount) }}</span></p>
-      </div>
-    </div>
 
-    <div v-if="isConfirmed && !isPaidStatus" class="detail-card payment-card no-print">
-      <h3>Payment</h3>
-      <p class="payment-status">
-        <strong>Status:</strong>
-        <span class="payment-badge not_received">{{ paymentStatusLabel }}</span>
-      </p>
-
-      <div class="payment-form">
-        <div class="form-group">
-          <label>Payment Method</label>
-          <select v-model="paymentForm.payment_method">
-            <option v-for="m in PAYMENT_ENTRY_METHODS" :key="m.value" :value="m.value">{{ m.label }}</option>
-          </select>
-        </div>
-
-        <template v-if="needsTransactionDetails">
-          <div class="form-group">
-            <label>Transaction ID</label>
-            <input
-              v-model="paymentForm.payment_transaction_id"
-              placeholder="Enter UPI / bank transaction ID"
-            />
-          </div>
-          <div class="form-group">
-            <label>Remarks</label>
-            <input
-              v-model="paymentForm.payment_remarks"
-              placeholder="Payment notes (optional)"
-            />
-          </div>
-          <p v-if="!paymentForm.payment_transaction_id?.trim()" class="payment-hint">
-            Paid status is only saved after you click Save Payment with a valid Transaction ID.
-          </p>
-        </template>
-
-        <div class="payment-actions">
-          <button type="button" class="btn btn--sm" :disabled="savingPayment" @click="savePayment">
-            {{ savingPayment ? 'Saving...' : 'Save Payment' }}
+        <div v-if="showPaymentPanel" class="payment-panel no-print">
+          <button type="button" class="payment-panel__toggle" @click="paymentExpanded = !paymentExpanded">
+            <span class="payment-panel__label">Payment</span>
+            <span :class="['payment-badge', isPaidStatus ? 'paid' : 'not_received']">
+              {{ paymentSummaryLabel }}
+            </span>
+            <span class="payment-panel__chevron">{{ paymentExpanded ? '▲' : '▼' }}</span>
           </button>
-        </div>
-        <p v-if="paymentError" class="payment-error">{{ paymentError }}</p>
-      </div>
-    </div>
 
-    <div v-if="isPaidStatus" class="detail-card payment-card no-print">
-      <h3>Payment</h3>
-      <p class="payment-status">
-        <strong>Status:</strong>
-        <span class="payment-badge paid">{{ paymentStatusLabel }}</span>
-        <span v-if="paymentMethodDetail" class="payment-method-detail">({{ paymentMethodDetail }})</span>
-      </p>
-      <p v-if="order.payment_transaction_id"><strong>Transaction ID:</strong> {{ order.payment_transaction_id }}</p>
-      <p v-if="order.payment_remarks"><strong>Remarks:</strong> {{ order.payment_remarks }}</p>
-      <button type="button" class="btn btn--sm btn--outline payment-edit-btn" @click="showPaymentEdit = true">
-        Update Payment
-      </button>
+          <div v-if="paymentExpanded" class="payment-panel__body">
+            <div class="payment-form payment-form--compact">
+              <div class="form-group">
+                <label>Method</label>
+                <select v-model="paymentForm.payment_method">
+                  <option
+                    v-for="m in (isPaidStatus ? PAYMENT_METHODS : PAYMENT_ENTRY_METHODS)"
+                    :key="m.value"
+                    :value="m.value"
+                  >
+                    {{ m.label }}
+                  </option>
+                </select>
+              </div>
 
-      <div v-if="showPaymentEdit" class="payment-form payment-form--edit">
-        <div class="form-group">
-          <label>Payment Method</label>
-          <select v-model="paymentForm.payment_method">
-            <option v-for="m in PAYMENT_METHODS" :key="m.value" :value="m.value">{{ m.label }}</option>
-          </select>
-        </div>
+              <template v-if="needsTransactionDetails">
+                <div class="form-group">
+                  <label>Transaction ID</label>
+                  <input
+                    v-model="paymentForm.payment_transaction_id"
+                    placeholder="UPI / bank transaction ID"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Remarks</label>
+                  <input v-model="paymentForm.payment_remarks" placeholder="Optional" />
+                </div>
+              </template>
 
-        <template v-if="needsTransactionDetails">
-          <div class="form-group">
-            <label>Transaction ID</label>
-            <input v-model="paymentForm.payment_transaction_id" />
+              <p v-if="paymentForm.payment_method === 'not_received'" class="payment-hint">
+                Saves as not received and sets status to Confirmed.
+              </p>
+              <p v-else-if="needsTransactionDetails && !paymentForm.payment_transaction_id?.trim()" class="payment-hint">
+                Transaction ID required to mark as Paid.
+              </p>
+
+              <div class="payment-actions">
+                <button type="button" class="btn btn--sm" :disabled="savingPayment" @click="savePayment">
+                  {{ savingPayment ? 'Saving...' : 'Save Payment' }}
+                </button>
+                <button
+                  v-if="isPaidStatus"
+                  type="button"
+                  class="btn btn--sm btn--outline"
+                  @click="cancelPaymentEdit"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p v-if="paymentError" class="payment-error">{{ paymentError }}</p>
+            </div>
           </div>
-          <div class="form-group">
-            <label>Remarks</label>
-            <input v-model="paymentForm.payment_remarks" />
-          </div>
-          <p v-if="!paymentForm.payment_transaction_id?.trim()" class="payment-hint">
-            UPI and Bank Transfer need a Transaction ID, or choose Payment not received yet to revert to Confirmed.
-          </p>
-        </template>
-
-        <p v-if="paymentForm.payment_method === 'not_received'" class="payment-hint">
-          Saving will mark payment as not received and set order status back to Confirmed.
-        </p>
-
-        <div class="payment-actions">
-          <button type="button" class="btn btn--sm" :disabled="savingPayment" @click="savePayment">
-            {{ savingPayment ? 'Saving...' : 'Save Payment' }}
-          </button>
-          <button type="button" class="btn btn--sm btn--outline" @click="cancelPaymentEdit">Cancel</button>
         </div>
-        <p v-if="paymentError" class="payment-error">{{ paymentError }}</p>
       </div>
     </div>
 
@@ -168,7 +138,7 @@ const order = ref(null);
 const items = ref([]);
 const savingPayment = ref(false);
 const paymentError = ref('');
-const showPaymentEdit = ref(false);
+const paymentExpanded = ref(false);
 
 const PAYMENT_ENTRY_METHODS = PAYMENT_METHODS.filter((m) => m.value !== 'not_received');
 
@@ -184,6 +154,16 @@ const displayStatus = computed(() =>
 
 const isConfirmed = computed(() => displayStatus.value === 'confirmed');
 const isPaidStatus = computed(() => displayStatus.value === 'paid');
+const showPaymentPanel = computed(() => isConfirmed.value || isPaidStatus.value);
+
+const paymentSummaryLabel = computed(() => {
+  if (isPaidStatus.value) {
+    return paymentMethodDetail.value
+      ? `Paid · ${paymentMethodDetail.value}`
+      : paymentStatusLabel.value;
+  }
+  return paymentStatusLabel.value;
+});
 
 const needsTransactionDetails = computed(() =>
   ['upi', 'bank_transfer'].includes(paymentForm.value.payment_method)
@@ -227,12 +207,12 @@ function syncPaymentForm() {
     payment_transaction_id: order.value.payment_transaction_id || '',
     payment_remarks: order.value.payment_remarks || '',
   };
-  showPaymentEdit.value = false;
 }
 
 function cancelPaymentEdit() {
   syncPaymentForm();
   paymentError.value = '';
+  paymentExpanded.value = false;
 }
 
 function handlePrint() {
@@ -244,6 +224,7 @@ async function updateStatus(status) {
   const updated = await orderStore.updateStatus(order.value.id, status);
   order.value = { ...order.value, ...updated };
   syncPaymentForm();
+  paymentExpanded.value = false;
 }
 
 async function savePayment() {
@@ -257,6 +238,7 @@ async function savePayment() {
     });
     order.value = { ...order.value, ...updated };
     syncPaymentForm();
+    paymentExpanded.value = false;
   } catch (e) {
     paymentError.value = e.response?.data?.error || 'Failed to save payment';
   } finally {
@@ -291,48 +273,77 @@ async function savePayment() {
   margin-top: 20px;
 }
 
-.payment-card {
-  margin-top: 20px;
+.detail-card--info {
+  display: flex;
+  flex-direction: column;
 }
 
-.payment-status {
-  margin-bottom: 16px;
-}
-
-.payment-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  margin-left: 8px;
-
-  &.not_received { background: #fef3c7; color: #d97706; }
-  &.paid { background: #d1fae5; color: #059669; }
-  &.upi, &.bank_transfer { background: #d1fae5; color: #059669; }
-  &.cash { background: #dbeafe; color: #2563eb; }
-}
-
-.payment-method-detail {
-  margin-left: 8px;
-  font-size: 0.85rem;
-  color: $text-muted;
-}
-
-.payment-edit-btn {
-  margin-top: 12px;
-}
-
-.payment-form--edit {
+.payment-panel {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid $border;
 }
 
-.payment-form {
-  display: grid;
-  gap: 14px;
-  max-width: 480px;
+.payment-panel__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  background: $background;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: $transition;
+
+  &:hover {
+    border-color: $primary;
+    background: rgba($primary, 0.04);
+  }
+}
+
+.payment-panel__label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: $primary;
+}
+
+.payment-panel__chevron {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: $text-muted;
+}
+
+.payment-panel__body {
+  margin-top: 12px;
+}
+
+.payment-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  &.not_received { background: #fef3c7; color: #d97706; }
+  &.paid { background: #d1fae5; color: #059669; }
+}
+
+.payment-form--compact {
+  gap: 10px;
+  max-width: none;
+}
+
+.payment-form--compact .form-group input,
+.payment-form--compact .form-group select {
+  padding: 8px 10px;
+  font-size: 0.88rem;
+}
+
+.payment-card {
+  margin-top: 20px;
 }
 
 .form-group {
