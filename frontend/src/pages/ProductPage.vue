@@ -15,9 +15,6 @@
             <span class="original-price">{{ formatPrice(product.original_price) }}</span>
             <span class="badge badge--discount">{{ product.discount_percentage }}% OFF</span>
           </div>
-          <p v-if="product.price_updated_at" class="price-updated">
-            Price updated: {{ new Date(product.price_updated_at).toLocaleDateString('en-IN') }}
-          </p>
           <p v-if="product.description" class="description">{{ product.description }}</p>
           <div class="categories-tags">
             <router-link
@@ -105,12 +102,6 @@ onMounted(async () => {
 
   .offer-price { font-size: 2rem; font-weight: 800; color: $primary; }
   .original-price { font-size: 1.2rem; color: $text-muted; text-decoration: line-through; }
-}
-
-.price-updated {
-  font-size: 0.85rem;
-  color: $text-muted;
-  margin-bottom: 16px;
 }
 
 .description {
