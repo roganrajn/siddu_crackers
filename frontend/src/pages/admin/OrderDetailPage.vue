@@ -8,9 +8,24 @@
       </div>
     </div>
 
-    <div class="print-header print-only">
-      <h1>Siddu Crackers</h1>
-      <p>Order Invoice · #{{ order.order_number }}</p>
+    <div class="order-brand-header">
+      <div class="order-brand-header__logo-wrap">
+        <img :src="logoSrc" :alt="companyName" class="order-brand-header__logo" />
+      </div>
+
+      <div class="order-brand-header__main">
+        <h1 class="order-brand-header__name">{{ companyName }}</h1>
+        <div v-if="companyPhone || companyEmail" class="order-brand-header__contact">
+          <span v-if="companyPhone" class="order-brand-header__contact-item">📞 {{ companyPhone }}</span>
+          <span v-if="companyPhone && companyEmail" class="order-brand-header__divider">|</span>
+          <span v-if="companyEmail" class="order-brand-header__contact-item">✉️ {{ companyEmail }}</span>
+        </div>
+      </div>
+
+      <div class="order-brand-header__invoice">
+        <span class="order-brand-header__invoice-label">Order Invoice</span>
+        <strong class="order-brand-header__invoice-no">#{{ order.order_number }}</strong>
+      </div>
     </div>
 
     <div class="order-detail-grid">
@@ -127,13 +142,16 @@
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useOrderStore } from '@/stores/orderStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getPaymentStatusLabel, getPaymentMethodDetail } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
 import { getStoredOrderBreakdown } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
+import defaultLogo from '@/assets/logo.png';
 
 const route = useRoute();
 const orderStore = useOrderStore();
+const settingsStore = useSettingsStore();
 const order = ref(null);
 const items = ref([]);
 const savingPayment = ref(false);
@@ -187,7 +205,15 @@ const formattedDate = computed(() =>
 
 const orderBreakdown = computed(() => (order.value ? getStoredOrderBreakdown(order.value) : null));
 
+const companyName = computed(() =>
+  (settingsStore.settings.company_name || 'Siddu Crackers').toUpperCase()
+);
+const companyPhone = computed(() => settingsStore.settings.phone || settingsStore.settings.whatsapp || '');
+const companyEmail = computed(() => settingsStore.settings.email || '');
+const logoSrc = computed(() => settingsStore.settings.logo || defaultLogo);
+
 onMounted(async () => {
+  await settingsStore.fetchSettings();
   const data = await orderStore.fetchOrder(route.params.id);
   order.value = data.order;
   items.value = data.items;
@@ -252,6 +278,88 @@ async function savePayment() {
 
 .print-only {
   display: none;
+}
+
+.order-brand-header {
+  @include card;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+
+  &__logo-wrap {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 110px;
+  }
+
+  &__logo {
+    display: block;
+    height: 96px;
+    width: auto;
+    max-width: 140px;
+    object-fit: contain;
+    object-position: left center;
+  }
+
+  &__main {
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__name {
+    margin: 0 0 8px;
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: $primary-dark;
+    line-height: 1.15;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  &__contact {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: $text-dark;
+  }
+
+  &__contact-item {
+    white-space: nowrap;
+  }
+
+  &__divider {
+    color: $text-muted;
+    font-weight: 400;
+  }
+
+  &__invoice {
+    flex-shrink: 0;
+    text-align: right;
+    padding-left: 16px;
+    border-left: 1px solid $border;
+  }
+
+  &__invoice-label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: $text-muted;
+    margin-bottom: 4px;
+  }
+
+  &__invoice-no {
+    font-size: 1.1rem;
+    color: $primary-dark;
+  }
 }
 
 .order-detail-grid {
@@ -412,6 +520,23 @@ async function savePayment() {
 
 @media (max-width: 768px) {
   .order-detail-grid { grid-template-columns: 1fr; }
+
+  .order-brand-header {
+    flex-wrap: wrap;
+
+    &__invoice {
+      width: 100%;
+      border-left: none;
+      border-top: 1px solid $border;
+      padding: 12px 0 0;
+      text-align: left;
+    }
+
+    &__logo {
+      height: 80px;
+      max-width: 120px;
+    }
+  }
 }
 
 @media print {
@@ -431,20 +556,28 @@ async function savePayment() {
     padding: 0;
   }
 
-  .print-header {
-    text-align: center;
+  .order-brand-header {
+    box-shadow: none;
+    border: 1px solid #ddd;
     margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid #333;
+    padding: 16px 20px;
+    page-break-inside: avoid;
 
-    h1 {
-      font-size: 1.5rem;
-      margin-bottom: 4px;
+    &__logo {
+      height: 88px;
+      max-width: 130px;
     }
 
-    p {
-      font-size: 0.95rem;
-      color: #555;
+    &__name {
+      font-size: 1.4rem;
+    }
+
+    &__contact {
+      font-size: 0.88rem;
+    }
+
+    &__invoice {
+      border-left-color: #ccc;
     }
   }
 
