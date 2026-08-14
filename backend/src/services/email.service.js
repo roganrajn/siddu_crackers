@@ -130,6 +130,16 @@ function buildSummaryRows(order, items, settings) {
   const discountLabel = breakdown.discount_label
     || (breakdown.discount_upto_percentage ? `Upto ${breakdown.discount_upto_percentage}% discount` : 'Discount');
 
+  const gstRow = breakdown.gst_applicable
+    ? `<tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">GST (${formatPct(breakdown.gst_percentage)})</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">+${formatCurrency(breakdown.gst_amount)}</td>
+      </tr>`
+    : `<tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">GST</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;color:#6B5A62;">Not Applicable</td>
+      </tr>`;
+
   return `
     <tr>
       <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">Sub Total</td>
@@ -147,6 +157,7 @@ function buildSummaryRows(order, items, settings) {
       <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">Packing (${formatPct(breakdown.packing_percentage)})</td>
       <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">${formatCurrency(breakdown.packing_amount)}</td>
     </tr>
+    ${gstRow}
     <tr style="background:#7D3C5E;color:#ffffff;">
       <td style="padding:12px;font-weight:700;border-bottom:1px solid #7D3C5E;">Net Amount</td>
       <td style="padding:12px;font-weight:700;text-align:right;border-bottom:1px solid #7D3C5E;">${formatCurrency(breakdown.net_amount)}</td>

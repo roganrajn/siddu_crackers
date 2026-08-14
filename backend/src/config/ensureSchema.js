@@ -55,5 +55,19 @@ export async function ensureSchema() {
     ALTER TABLE order_items ADD COLUMN IF NOT EXISTS mrp_price DECIMAL(10, 2);
   `);
 
+  await pool.query(`
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS gst_enabled BOOLEAN DEFAULT true;
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5, 2) DEFAULT 18;
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50) DEFAULT '33ABAFD1628C1Z6';
+  `);
+
+  await pool.query(`
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_amount DECIMAL(10, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_applicable BOOLEAN;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS taxable_amount DECIMAL(10, 2);
+  `);
+
   console.log('[db] Schema check complete');
 }

@@ -28,13 +28,21 @@ router.put('/', authMiddleware, upload.single('logo'), async (req, res) => {
       'google_analytics_id', 'facebook_pixel_id',
       'facebook', 'instagram', 'youtube',
       'min_order_amount', 'order_packing_percentage',
+      'gst_enabled', 'gst_percentage', 'gst_number',
     ];
 
     let logo = req.body.logo;
     if (req.file) logo = await uploadToS3(req.file, 'logo');
 
     const existing = await pool.query('SELECT id FROM website_settings LIMIT 1');
-    const values = fields.map(f => req.body[f] ?? null);
+    const values = fields.map(f => {
+      const val = req.body[f];
+      // Convert string booleans to actual booleans
+      if (f === 'gst_enabled' && val !== null && val !== undefined) {
+        return val === 'true' || val === true;
+      }
+      return val ?? null;
+    });
     values.push(logo);
 
     let result;

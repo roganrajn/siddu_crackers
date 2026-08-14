@@ -18,6 +18,16 @@
         <span>Packing ({{ formatPct(breakdown.packing_percentage) }})</span>
         <span>{{ formatPrice(breakdown.packing_amount) }}</span>
       </div>
+      <div class="pricing-summary__row">
+        <span v-if="breakdown.gst_applicable">GST ({{ formatPct(breakdown.gst_percentage) }})</span>
+        <span v-else>GST</span>
+        <span v-if="breakdown.gst_applicable">
+          +{{ formatPrice(breakdown.gst_amount) }}
+        </span>
+        <span v-else class="pricing-summary__not-applicable">
+          Not Applicable
+        </span>
+      </div>
       <div class="pricing-summary__row pricing-summary__row--net">
         <span>Net Amount</span>
         <strong>{{ formatPrice(breakdown.net_amount) }}</strong>
@@ -73,6 +83,11 @@ function formatPct(value) {
   color: #b91c1c;
 }
 
+.pricing-summary__not-applicable {
+  color: #6B5A62;
+  font-size: 0.85rem;
+}
+
 .pricing-summary__row--net {
   margin-top: 4px;
   padding-top: 10px;
@@ -104,7 +119,7 @@ function formatPct(value) {
   }
 
   .pricing-summary__row--net {
-    background: $primary-dark;
+    background: $primary-dark !important;
     color: $white;
     border-bottom: none;
     margin-top: 0;

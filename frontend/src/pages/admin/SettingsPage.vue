@@ -67,6 +67,38 @@
         Product discounts come from each product's MRP and offer price. Summary shows overall savings (e.g. Upto 80% discount).
       </p>
 
+      <h3 class="section-label">GST Configuration</h3>
+      <div class="settings-grid">
+        <div class="form-group">
+          <label>
+            <input v-model.boolean="form.gst_enabled" type="checkbox" />
+            Enable GST
+          </label>
+        </div>
+        <div class="form-group">
+          <label>GST Rate (%)</label>
+          <input 
+            v-model.number="form.gst_percentage" 
+            type="number" 
+            min="0" 
+            max="100" 
+            step="0.01"
+            :disabled="!form.gst_enabled"
+          />
+        </div>
+        <div class="form-group full-width">
+          <label>GST Number (GSTIN)</label>
+          <input 
+            v-model="form.gst_number"
+            placeholder="e.g., 33ABAFD1628C1Z6"
+            :disabled="!form.gst_enabled"
+          />
+        </div>
+      </div>
+      <p class="settings-note">
+        GST applies to orders from all states except Tamil Nadu and Puducherry. GST is calculated on the amount after discount and packing charges.
+      </p>
+
       <h3 class="section-label">SEO & Analytics</h3>
       <div class="settings-grid">
         <div class="form-group"><label>Meta Title</label><input v-model="form.meta_title" /></div>
@@ -148,7 +180,16 @@ async function handleSave() {
   saving.value = true;
   saved.value = false;
   const fd = new FormData();
-  Object.entries(form.value).forEach(([k, v]) => { if (v != null) fd.append(k, v); });
+  Object.entries(form.value).forEach(([k, v]) => {
+    if (v != null) {
+      // For boolean fields, convert to lowercase string
+      if (typeof v === 'boolean') {
+        fd.append(k, v ? 'true' : 'false');
+      } else {
+        fd.append(k, v);
+      }
+    }
+  });
   if (logoFile.value) fd.append('logo', logoFile.value);
   await settingsStore.updateSettings(fd);
   form.value = { ...settingsStore.settings };

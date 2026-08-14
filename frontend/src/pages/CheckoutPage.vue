@@ -60,14 +60,14 @@
           </div>
 
           <div class="form-submit">
-            <button type="submit" class="btn btn--large" :disabled="submitting || !cartStore.meetsMinOrder">
+            <button type="submit" class="btn btn--large" :disabled="submitting || !meetsMinOrder">
               {{ submitting ? 'Placing Order...' : '🎆 Submit Order' }}
             </button>
           </div>
 
-          <p v-if="!cartStore.meetsMinOrder" class="min-order-warning">
-            Minimum order is {{ formatPrice(cartStore.pricing.min_order_amount) }}.
-            Add {{ formatPrice(cartStore.minOrderRemaining) }} more to continue.
+          <p v-if="!meetsMinOrder" class="min-order-warning">
+            Minimum order is {{ formatPrice(checkoutPricing.min_order_amount) }}.
+            Add {{ formatPrice(minOrderRemaining) }} more to continue.
           </p>
 
           <p v-if="error" class="error-msg">{{ error }}</p>
@@ -80,13 +80,13 @@
             :aria-expanded="summaryOpen"
             @click="summaryOpen = !summaryOpen"
           >
-            <span>Order Summary ({{ cartStore.itemCount }} items · {{ formatPrice(cartStore.total) }})</span>
+            <span>Order Summary ({{ cartStore.itemCount }} items · {{ formatPrice(checkoutPricing.net_amount) }})</span>
             <span class="order-summary__chevron" :class="{ open: summaryOpen }">▾</span>
           </button>
 
           <div class="order-summary__body" :class="{ open: summaryOpen }">
             <h2 class="order-summary__title">Order Summary</h2>
-            <OrderPricingTables :items="cartStore.items" :breakdown="cartStore.pricing" />
+            <OrderPricingTables :items="cartStore.items" :breakdown="checkoutPricing" />
           </div>
         </div>
       </div>
@@ -95,16 +95,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useCartStore } from '@/stores/cartStore';
 import { useOrderStore } from '@/stores/orderStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { formatPrice, INDIAN_STATES } from '@/utils/helpers';
+import { calculateOrderBreakdown } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 
 const router = useRouter();
 const cartStore = useCartStore();
 const orderStore = useOrderStore();
+const settingsStore = useSettingsStore();
 
 const submitting = ref(false);
 const error = ref('');
@@ -120,6 +123,17 @@ const form = ref({
   pincode: '',
   remarks: '',
 });
+
+// Compute pricing with the selected state for GST
+const checkoutPricing = computed(() => {
+  return calculateOrderBreakdown(cartStore.items, settingsStore.settings, form.value.state);
+});
+
+const meetsMinOrder = computed(() => checkoutPricing.value.net_amount >= checkoutPricing.value.min_order_amount);
+
+const minOrderRemaining = computed(() =>
+  Math.max(0, checkoutPricing.value.min_order_amount - checkoutPricing.value.net_amount)
+);
 
 onMounted(() => {
   if (!cartStore.items.length) {

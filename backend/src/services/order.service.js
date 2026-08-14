@@ -203,7 +203,7 @@ export async function createOrder(orderData) {
 
     const orderSettings = await getOrderSettings(client);
     const orderItems = await resolveOrderItems(client, items);
-    const breakdown = calculateOrderBreakdown(orderItems, orderSettings);
+    const breakdown = calculateOrderBreakdown(orderItems, orderSettings, state);
 
     if (breakdown.net_amount < breakdown.min_order_amount) {
       const err = new Error(
@@ -220,10 +220,10 @@ export async function createOrder(orderData) {
         order_number, customer_name, phone, whatsapp, email, state, city, address, pincode, remarks,
         total_amount, subtotal_mrp, discount_percentage, discount_amount, after_discount,
         special_discount_percentage, special_discount_amount, after_special_discount,
-        packing_percentage, packing_amount, net_amount, status
+        packing_percentage, packing_amount, gst_applicable, gst_percentage, gst_amount, gst_number, taxable_amount, net_amount, status
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'new'
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, 'new'
       ) RETURNING *`,
       [
         orderNumber,
@@ -246,6 +246,11 @@ export async function createOrder(orderData) {
         breakdown.after_special_discount,
         breakdown.packing_percentage,
         breakdown.packing_amount,
+        breakdown.gst_applicable,
+        breakdown.gst_percentage,
+        breakdown.gst_amount,
+        breakdown.gst_number,
+        breakdown.taxable_amount,
         breakdown.net_amount,
       ]
     );

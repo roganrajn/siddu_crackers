@@ -5,13 +5,38 @@ export { roundMoney };
 export const DEFAULT_ORDER_SETTINGS = {
   min_order_amount: 5000,
   order_packing_percentage: 5,
+  gst_enabled: true,
+  gst_percentage: 18,
+  gst_number: '33ABAFD1628C1Z6',
 };
+
+// States exempt from GST
+export const GST_EXEMPT_STATES = [
+  'tamil nadu',
+  'puducherry',
+  'pondicherry',
+];
 
 export function normalizeOrderSettings(settings = {}) {
   return {
     min_order_amount: parseFloat(settings.min_order_amount ?? DEFAULT_ORDER_SETTINGS.min_order_amount),
     order_packing_percentage: parseFloat(settings.order_packing_percentage ?? DEFAULT_ORDER_SETTINGS.order_packing_percentage),
+    gst_enabled: settings.gst_enabled ?? DEFAULT_ORDER_SETTINGS.gst_enabled,
+    gst_percentage: parseFloat(settings.gst_percentage ?? DEFAULT_ORDER_SETTINGS.gst_percentage),
+    gst_number: settings.gst_number ?? DEFAULT_ORDER_SETTINGS.gst_number,
   };
+}
+
+export function isGstApplicable(state, settings = {}) {
+  if (!settings.gst_enabled) return false;
+  if (!state) return false;
+  const normalizedState = state.toLowerCase().trim();
+  return !GST_EXEMPT_STATES.includes(normalizedState);
+}
+
+export function calculateGst(taxableAmount, gstPercentage) {
+  if (taxableAmount <= 0 || gstPercentage <= 0) return 0;
+  return roundMoney(taxableAmount * gstPercentage / 100);
 }
 
 export function getItemMrp(item) {
@@ -35,9 +60,9 @@ export function getMaxDiscountPct(items = []) {
 
 /**
  * Product-level discounts are already in offer prices.
- * Summary: MRP subtotal → product savings → offer subtotal → packing → net.
+ * Summary: MRP subtotal → product savings → offer subtotal → packing → GST → net.
  */
-export function calculateOrderBreakdown(items, settings = {}) {
+export function calculateOrderBreakdown(items, settings = {}, state = null) {
   const cfg = normalizeOrderSettings(settings);
 
   const subtotalMrp = roundMoney(
@@ -53,7 +78,13 @@ export function calculateOrderBreakdown(items, settings = {}) {
   const afterDiscount = subtotalOffer;
 
   const packingAmount = roundMoney(afterDiscount * cfg.order_packing_percentage / 100);
-  const netAmount = roundMoney(afterDiscount + packingAmount);
+  const afterPacking = roundMoney(afterDiscount + packingAmount);
+
+  // GST calculation: apply on taxable amount (after discount + packing)
+  const gstApplicable = isGstApplicable(state, cfg);
+  const taxableAmount = gstApplicable ? afterPacking : 0;
+  const gstAmount = gstApplicable ? calculateGst(afterPacking, cfg.gst_percentage) : 0;
+  const netAmount = roundMoney(afterPacking + gstAmount);
 
   return {
     subtotal_mrp: subtotalMrp,
@@ -68,6 +99,11 @@ export function calculateOrderBreakdown(items, settings = {}) {
     after_special_discount: afterDiscount,
     packing_percentage: cfg.order_packing_percentage,
     packing_amount: packingAmount,
+    gst_applicable: gstApplicable,
+    gst_percentage: gstApplicable ? cfg.gst_percentage : 0,
+    gst_amount: gstAmount,
+    gst_number: cfg.gst_number,
+    taxable_amount: taxableAmount,
     net_amount: netAmount,
     min_order_amount: cfg.min_order_amount,
   };
@@ -93,6 +129,11 @@ export function getStoredOrderBreakdown(order) {
       after_discount: afterDiscount,
       packing_percentage: parseFloat(order.packing_percentage ?? 0),
       packing_amount: parseFloat(order.packing_amount ?? 0),
+      gst_applicable: order.gst_applicable ?? false,
+      gst_percentage: parseFloat(order.gst_percentage ?? 0),
+      gst_amount: parseFloat(order.gst_amount ?? 0),
+      gst_number: order.gst_number ?? DEFAULT_ORDER_SETTINGS.gst_number,
+      taxable_amount: parseFloat(order.taxable_amount ?? 0),
       net_amount: parseFloat(order.net_amount ?? order.total_amount ?? 0),
     };
   }
