@@ -119,7 +119,7 @@ async function createNotification(type, title, message, referenceId) {
 
 async function getOrderSettings(client) {
   const result = await client.query(
-    `SELECT min_order_amount, order_packing_percentage
+    `SELECT min_order_amount, order_packing_percentage, gst_enabled, gst_percentage, gst_number
      FROM website_settings ORDER BY id LIMIT 1`
   );
   return normalizeOrderSettings(result.rows[0] || {});
