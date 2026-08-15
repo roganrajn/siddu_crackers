@@ -6,6 +6,7 @@ import {
   roundMoney,
   normalizeOrderSettings,
   normalizeBoolean,
+  resolveGstApplicableFromState,
 } from '../utils/orderPricing.js';
 
 const VALID_STATUSES = ['new', 'confirmed', 'paid', 'cancelled'];
@@ -209,7 +210,16 @@ export async function createOrder(orderData) {
 
     const orderSettings = await getOrderSettings(client);
     const orderItems = await resolveOrderItems(client, items);
-    const breakdown = calculateOrderBreakdown(orderItems, orderSettings, state);
+    const gstApplicable = Boolean(
+      orderSettings.gst_enabled
+      && orderSettings.gst_percentage > 0
+      && resolveGstApplicableFromState(state)
+    );
+    const breakdown = calculateOrderBreakdown(
+      orderItems,
+      { ...orderSettings, gst_applicable: gstApplicable },
+      state
+    );
 
     if (breakdown.net_amount < breakdown.min_order_amount) {
       const err = new Error(

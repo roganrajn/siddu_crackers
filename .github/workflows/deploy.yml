@@ -50,7 +50,7 @@ jobs:
             cd ..
             if [ -f backend/.env ]; then
               DATABASE_URL=$(grep '^DATABASE_URL=' backend/.env | cut -d= -f2-)
-              for migration in database/migration_v5.sql database/migration_v6.sql database/migration_v7.sql database/migration_v8.sql database/migration_v9_gst_backfill.sql database/migration_v10_gst_default_false.sql; do
+              for migration in database/migration_v5.sql database/migration_v6.sql database/migration_v7.sql database/migration_v8.sql; do
                 if [ -f "$migration" ]; then
                   echo "Applying $migration..."
                   psql "$DATABASE_URL" -f "$migration" || echo "Warning: $migration skipped or failed"
