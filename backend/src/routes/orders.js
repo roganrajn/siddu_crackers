@@ -194,6 +194,21 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+router.put('/:id/bill-type', authMiddleware, async (req, res) => {
+  try {
+    const { bill_type } = req.body;
+    if (!bill_type) return res.status(400).json({ error: 'bill_type is required' });
+    const order = await updateOrderBillType(req.params.id, bill_type);
+    res.json(order);
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    if (error.status === 404) return res.status(404).json({ error: error.message });
+    console.error('Update order bill type error:', error.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/** @deprecated Use PUT /:id/bill-type */
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const { bill_type } = req.body;

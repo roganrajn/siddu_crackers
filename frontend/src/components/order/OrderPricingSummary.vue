@@ -1,5 +1,5 @@
 <template>
-  <div :class="['pricing-summary', `pricing-summary--${variant}`]">
+  <div :class="['pricing-summary', `pricing-summary--${variant}`, { 'pricing-summary--compact': compact }]">
     <h4 v-if="showTitle" class="pricing-summary__title">Summary</h4>
     <div class="pricing-summary__rows">
       <div class="pricing-summary__row">
@@ -53,6 +53,7 @@ const props = defineProps({
   showTitle: { type: Boolean, default: true },
   showGst: { type: Boolean, default: true },
   showGstStatus: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
 });
 
 const gstStatusLabel = computed(() => getGstStatusLabel(props.breakdown));
@@ -173,6 +174,51 @@ function formatPct(value) {
 @media (max-width: 768px) {
   .pricing-summary--table {
     width: 100%;
+  }
+}
+
+@media print {
+  .pricing-summary {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    break-before: auto;
+  }
+
+  .pricing-summary__title {
+    margin: 0 0 4px;
+    font-size: 0.8rem;
+  }
+
+  .pricing-summary__rows {
+    gap: 0;
+  }
+
+  .pricing-summary__row {
+    font-size: 0.72rem;
+    gap: 8px;
+  }
+
+  .pricing-summary--table {
+    width: min(100%, 280px);
+
+    .pricing-summary__row {
+      padding: 4px 6px;
+    }
+
+    .pricing-summary__row--net {
+      padding: 5px 6px;
+
+      strong {
+        font-size: 0.8rem;
+      }
+    }
+  }
+
+  .pricing-summary--compact.pricing-summary--table {
+    flex: 0 0 38%;
+    width: 38%;
+    max-width: none;
+    align-self: flex-start;
   }
 }
 </style>

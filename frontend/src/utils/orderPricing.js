@@ -66,14 +66,16 @@ export function isGstApplicable(state, settings = {}) {
 /** Whether GST applies for a resolved bill type (explicit override ignores state exemption). */
 export function isGstApplicableForBillType(state, cfg, billType, settings = {}) {
   if (billType === 'without_gst') return false;
-  if (!cfg.gst_enabled) return false;
 
   const explicitType = normalizeBillType(settings.bill_type ?? settings.gst_bill_type ?? cfg.bill_type);
   if (explicitType === 'with_gst') return true;
   if (explicitType === 'without_gst') return false;
 
-  if (!state) return true;
-  return !GST_EXEMPT_STATES.includes(String(state).trim().toLowerCase());
+  if (state) {
+    return !GST_EXEMPT_STATES.includes(String(state).trim().toLowerCase());
+  }
+
+  return normalizeBoolean(cfg.gst_enabled, DEFAULT_ORDER_SETTINGS.gst_enabled);
 }
 
 export function getGstStatusLabel(breakdown) {
@@ -175,8 +177,9 @@ export function calculateOrderBreakdown(items, settings = {}, state = null) {
   };
 }
 
-export function getStoredOrderBreakdown(order) {
+export function getStoredOrderBreakdown(order, settings = {}) {
   if (order?.subtotal_mrp != null && order?.net_amount != null) {
+    const cfg = normalizeOrderSettings(settings);
     const subtotalMrp = parseFloat(order.subtotal_mrp);
     const legacySpecial = parseFloat(order.special_discount_amount ?? 0) > 0;
     const afterDiscount = legacySpecial
@@ -184,8 +187,21 @@ export function getStoredOrderBreakdown(order) {
       : parseFloat(order.after_discount ?? order.subtotal_offer ?? 0);
     const discountAmount = parseFloat(order.discount_amount ?? Math.max(0, subtotalMrp - afterDiscount));
     const discountUptoPct = parseFloat(order.discount_upto_percentage ?? order.discount_percentage ?? 0);
+    const packingPercentage = parseFloat(order.packing_percentage ?? cfg.order_packing_percentage ?? 0);
+    const packingAmount = parseFloat(order.packing_amount ?? roundMoney(afterDiscount * packingPercentage / 100));
+    const afterPacking = roundMoney(afterDiscount + packingAmount);
+
     const normalizedBillType = normalizeBillType(order.bill_type || 'auto');
-    const effectiveBillType = normalizedBillType === 'auto' ? resolveBillType(order.state, { gst_enabled: order.gst_applicable !== false }) : normalizedBillType;
+    const effectiveBillType = normalizedBillType === 'auto'
+      ? resolveBillType(order.state, { ...cfg, bill_type: 'auto' })
+      : normalizedBillType;
+
+    const gstApplicable = effectiveBillType === 'with_gst';
+    const gstPercentage = gstApplicable
+      ? parseFloat(order.gst_percentage ?? cfg.gst_percentage ?? DEFAULT_ORDER_SETTINGS.gst_percentage)
+      : 0;
+    const gstAmount = gstApplicable ? calculateGst(afterPacking, gstPercentage) : 0;
+    const netAmount = roundMoney(afterPacking + gstAmount);
 
     return {
       subtotal_mrp: subtotalMrp,
@@ -195,15 +211,15 @@ export function getStoredOrderBreakdown(order) {
       discount_amount: discountAmount,
       discount_percentage: discountUptoPct,
       after_discount: afterDiscount,
-      packing_percentage: parseFloat(order.packing_percentage ?? 0),
-      packing_amount: parseFloat(order.packing_amount ?? 0),
+      packing_percentage: packingPercentage,
+      packing_amount: packingAmount,
       bill_type: effectiveBillType,
-      gst_applicable: order.gst_applicable ?? false,
-      gst_percentage: parseFloat(order.gst_percentage ?? 0),
-      gst_amount: parseFloat(order.gst_amount ?? 0),
-      gst_number: order.gst_number ?? DEFAULT_ORDER_SETTINGS.gst_number,
-      taxable_amount: parseFloat(order.taxable_amount ?? 0),
-      net_amount: parseFloat(order.net_amount ?? order.total_amount ?? 0),
+      gst_applicable: gstApplicable,
+      gst_percentage: gstPercentage,
+      gst_amount: gstAmount,
+      gst_number: order.gst_number ?? cfg.gst_number ?? DEFAULT_ORDER_SETTINGS.gst_number,
+      taxable_amount: gstApplicable ? afterPacking : 0,
+      net_amount: netAmount,
     };
   }
   return null;

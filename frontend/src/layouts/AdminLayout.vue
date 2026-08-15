@@ -234,15 +234,25 @@ function handleLogout() {
   .admin-layout {
     display: block;
     min-height: auto;
+    height: auto;
   }
 
   .admin-main {
     margin-left: 0 !important;
     background: #fff !important;
+    min-height: auto !important;
+    height: auto !important;
   }
 
   .admin-content {
     padding: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+  }
+
+  .admin-page {
+    min-height: auto !important;
+    height: auto !important;
   }
 
   body {

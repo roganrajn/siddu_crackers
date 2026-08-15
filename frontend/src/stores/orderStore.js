@@ -76,7 +76,7 @@ export const useOrderStore = defineStore('order', () => {
   }
 
   async function updateBillType(id, billType) {
-    const { data } = await api.put(`/orders/${id}`, { bill_type: billType });
+    const { data } = await api.put(`/orders/${id}/bill-type`, { bill_type: billType });
     const idx = orders.value.findIndex((o) => o.id === id);
     if (idx !== -1) orders.value[idx] = data;
     return data;

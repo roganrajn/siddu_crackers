@@ -1,5 +1,5 @@
 <template>
-  <div v-if="order" class="admin-page order-print-page">
+  <div v-if="order" class="admin-page order-print-page" :class="{ 'order-print-page--compact': isCompactPrint }">
     <div class="page-header no-print">
       <h2>Order #{{ order.order_number }}</h2>
       <div class="page-header__actions">
@@ -53,7 +53,13 @@
             <option v-for="s in ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
         </p>
-        <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(order.net_amount || order.total_amount) }}</span></p>
+        <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(displayNetAmount) }}</span></p>
+        <p v-if="orderBreakdown?.gst_applicable">
+          <strong>GST ({{ orderBreakdown.gst_percentage }}%):</strong> {{ formatPrice(orderBreakdown.gst_amount) }}
+        </p>
+        <p v-else-if="orderBreakdown">
+          <strong>GST:</strong> Not Applicable
+        </p>
         <p v-if="order.gst_number || orderBreakdown?.gst_number">
           <strong>GSTIN:</strong> {{ order.gst_number || orderBreakdown?.gst_number }}
         </p>
@@ -62,12 +68,14 @@
           <select
             :value="order.bill_type || (order.gst_applicable ? 'with_gst' : 'without_gst')"
             class="status-select no-print"
+            :disabled="savingBillType"
             @change="updateBillType($event.target.value)"
           >
             <option value="with_gst">With GST</option>
             <option value="without_gst">Without GST</option>
           </select>
         </p>
+        <p v-if="billTypeError" class="bill-type-error no-print">{{ billTypeError }}</p>
 
         <div v-if="showPaymentPanel" class="payment-panel no-print">
           <button type="button" class="payment-panel__toggle" @click="paymentExpanded = !paymentExpanded">
@@ -141,12 +149,16 @@
       <p v-if="order.payment_remarks"><strong>Remarks:</strong> {{ order.payment_remarks }}</p>
     </div>
 
-    <div class="detail-card items-card">
+    <div
+      class="detail-card items-card"
+      :class="{ 'items-card--compact': isCompactPrint }"
+    >
       <h3>Order Items</h3>
       <OrderPricingTables
         :items="items"
         :breakdown="orderBreakdown"
         :fallback-total="order.total_amount"
+        :compact="isCompactPrint"
       />
     </div>
   </div>
@@ -169,7 +181,9 @@ const settingsStore = useSettingsStore();
 const order = ref(null);
 const items = ref([]);
 const savingPayment = ref(false);
+const savingBillType = ref(false);
 const paymentError = ref('');
+const billTypeError = ref('');
 const paymentExpanded = ref(false);
 
 const PAYMENT_ENTRY_METHODS = PAYMENT_METHODS.filter((m) => m.value !== 'not_received');
@@ -217,7 +231,13 @@ const formattedDate = computed(() =>
     : ''
 );
 
-const orderBreakdown = computed(() => (order.value ? getStoredOrderBreakdown(order.value) : null));
+const orderBreakdown = computed(() => (order.value ? getStoredOrderBreakdown(order.value, settingsStore.settings) : null));
+
+const displayNetAmount = computed(() =>
+  orderBreakdown.value?.net_amount ?? order.value?.net_amount ?? order.value?.total_amount ?? 0
+);
+
+const isCompactPrint = computed(() => items.value.length <= 6);
 
 const companyName = computed(() =>
   (settingsStore.settings.company_name || 'Siddu Crackers').toUpperCase()
@@ -265,6 +285,19 @@ async function updateStatus(status) {
   order.value = { ...order.value, ...updated };
   syncPaymentForm();
   paymentExpanded.value = false;
+}
+
+async function updateBillType(billType) {
+  billTypeError.value = '';
+  savingBillType.value = true;
+  try {
+    const updated = await orderStore.updateBillType(order.value.id, billType);
+    order.value = { ...order.value, ...updated };
+  } catch (e) {
+    billTypeError.value = e.response?.data?.error || 'Failed to update bill type';
+  } finally {
+    savingBillType.value = false;
+  }
 }
 
 async function savePayment() {
@@ -503,6 +536,12 @@ async function savePayment() {
   margin: 0;
 }
 
+.bill-type-error {
+  color: #ef4444;
+  font-size: 0.85rem;
+  margin: 4px 0 0;
+}
+
 .status-row {
   display: flex;
   align-items: center;
@@ -554,6 +593,11 @@ async function savePayment() {
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
   .no-print {
     display: none !important;
   }
@@ -568,36 +612,49 @@ async function savePayment() {
 
   .order-print-page {
     padding: 0;
+    min-height: auto !important;
+    height: auto !important;
   }
 
   .order-brand-header {
     box-shadow: none;
     border: 1px solid #ddd;
-    margin-bottom: 24px;
-    padding: 16px 20px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
     page-break-inside: avoid;
 
     &__logo {
-      height: 88px;
-      max-width: 130px;
+      height: 52px;
+      max-width: 90px;
     }
 
     &__name {
-      font-size: 1.4rem;
+      font-size: 1.1rem;
+      margin-bottom: 4px;
     }
 
     &__contact {
-      font-size: 0.88rem;
+      font-size: 0.75rem;
     }
 
     &__invoice {
       border-left-color: #ccc;
     }
+
+    &__invoice-label {
+      font-size: 0.68rem;
+      margin-bottom: 2px;
+    }
+
+    &__invoice-no {
+      font-size: 0.95rem;
+    }
   }
 
   .order-detail-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: 8px;
+    margin-bottom: 8px;
     page-break-inside: avoid;
   }
 
@@ -605,12 +662,60 @@ async function savePayment() {
     box-shadow: none;
     border: 1px solid #ddd;
     break-inside: avoid;
+    padding: 10px 12px;
+
+    h3 {
+      margin-bottom: 6px;
+      font-size: 0.85rem;
+    }
+
+    p {
+      margin-bottom: 3px;
+      font-size: 0.75rem;
+      line-height: 1.35;
+    }
+
+    .total {
+      font-size: 1rem !important;
+    }
   }
 
   .items-card {
     box-shadow: none;
     border: 1px solid #ddd;
+    margin-top: 0;
     page-break-inside: auto;
+    break-inside: auto;
+
+    h3 {
+      margin-bottom: 4px;
+    }
+  }
+
+  .items-card--compact {
+    margin-top: 6px;
+    padding: 8px 10px;
+  }
+
+  .order-print-page--compact {
+    .order-brand-header {
+      margin-bottom: 8px;
+      padding: 6px 10px;
+    }
+
+    .order-detail-grid {
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .detail-card {
+      padding: 8px 10px;
+    }
+  }
+
+  .payment-card {
+    margin-top: 8px;
+    padding: 8px 10px;
   }
 
   .admin-table {
@@ -618,8 +723,8 @@ async function savePayment() {
     border: 1px solid #ddd;
 
     th, td {
-      padding: 8px 12px;
-      font-size: 0.85rem;
+      padding: 4px 6px;
+      font-size: 0.75rem;
     }
 
     tbody tr {

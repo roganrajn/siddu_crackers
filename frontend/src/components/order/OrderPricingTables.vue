@@ -1,5 +1,5 @@
 <template>
-  <div class="order-pricing">
+  <div :class="['order-pricing', { 'order-pricing--compact': compact }]">
     <div class="order-pricing__items-wrap">
       <table class="order-pricing__items">
         <thead>
@@ -34,6 +34,7 @@
       variant="table"
       :show-gst="showGst"
       :show-gst-status="showGstStatus"
+      :compact="compact"
     />
 
     <div v-else-if="fallbackTotal != null" class="order-pricing__legacy-total">
@@ -58,6 +59,7 @@ defineProps({
   fallbackTotal: { type: Number, default: null },
   showGst: { type: Boolean, default: true },
   showGstStatus: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
 });
 
 function itemKey(item, index) {
@@ -139,5 +141,63 @@ function itemKey(item, index) {
   text-align: right;
   font-size: 1.1rem;
   color: $primary;
+}
+
+@media print {
+  .order-pricing {
+    gap: 6px;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .order-pricing--compact {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .order-pricing__items {
+    font-size: 0.72rem;
+
+    thead {
+      display: table-header-group;
+    }
+
+    th, td {
+      padding: 4px 6px;
+    }
+
+    tbody tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    thead th {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+
+  .order-pricing__mrp-struck {
+    font-size: 0.65rem;
+    line-height: 1.2;
+  }
+
+  .order-pricing__offer-price {
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .order-pricing--compact {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 10px;
+
+    .order-pricing__items-wrap {
+      flex: 1 1 58%;
+      min-width: 0;
+      overflow: visible;
+    }
+  }
 }
 </style>

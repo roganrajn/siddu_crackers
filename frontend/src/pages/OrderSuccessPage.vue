@@ -23,6 +23,10 @@
             <span>Total Amount</span>
             <strong>{{ formatPrice(orderTotal) }}</strong>
           </div>
+          <div v-if="gstStatusLabel" class="order-info__item order-info__item--wide">
+            <span>GST Status</span>
+            <strong>{{ gstStatusLabel }}</strong>
+          </div>
           <div v-if="gstNumber" class="order-info__item order-info__item--wide">
             <span>GSTIN</span>
             <strong>{{ gstNumber }}</strong>
@@ -78,7 +82,7 @@ import { ref, computed } from 'vue';
 import { useOrderStore } from '@/stores/orderStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { formatPrice, getPhoneLink, getWhatsAppLink, getOrderWhatsAppMessage } from '@/utils/helpers';
-import { getStoredOrderBreakdown } from '@/utils/orderPricing';
+import { getStoredOrderBreakdown, getGstStatusLabel } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 import { openWhatsApp } from '@/services/whatsapp.service';
 
@@ -94,9 +98,10 @@ const hasOrder = computed(() => !!orderData.value?.order || !!orderData.value?.o
 const order = computed(() => orderData.value?.order || orderData.value);
 const orderItems = computed(() => orderData.value?.items || []);
 const orderNum = computed(() => order.value?.order_number || '');
-const orderTotal = computed(() => order.value?.net_amount || order.value?.total_amount || 0);
-const orderBreakdown = computed(() => getStoredOrderBreakdown(order.value));
-const gstNumber = computed(() => order.value?.gst_number || orderBreakdown.value?.gst_number || '');
+const orderBreakdown = computed(() => getStoredOrderBreakdown(order.value, settings.value));
+const orderTotal = computed(() => orderBreakdown.value?.net_amount ?? order.value?.net_amount ?? order.value?.total_amount ?? 0);
+const gstStatusLabel = computed(() => getGstStatusLabel(orderBreakdown.value));
+const gstNumber = computed(() => orderBreakdown.value?.gst_number || order.value?.gst_number || '');
 const customerName = computed(() => order.value?.customer_name || '');
 const customerPhone = computed(() => order.value?.phone || '');
 
