@@ -383,42 +383,52 @@ export async function updateOrderStatus(orderId, statusOrPayload, note = null) {
       ? buildGstUpdateFields(order, await getOrderSettings(client), gstFlag)
       : null;
 
-    const result = await client.query(
-      `UPDATE orders SET
-        status = $1::varchar,
-        payment_method = CASE
-          WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN 'not_received'
-          ELSE payment_method
-        END,
-        payment_transaction_id = CASE
-          WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN NULL
-          ELSE payment_transaction_id
-        END,
-        payment_remarks = CASE
-          WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN NULL
-          ELSE payment_remarks
-        END,
-        gst_applicable = CASE WHEN $2::boolean THEN $3::boolean ELSE gst_applicable END,
-        gst_percentage = CASE WHEN $2::boolean THEN $4::numeric ELSE gst_percentage END,
-        gst_amount = CASE WHEN $2::boolean THEN $5::numeric ELSE gst_amount END,
-        gst_number = CASE WHEN $2::boolean THEN $6 ELSE gst_number END,
-        taxable_amount = CASE WHEN $2::boolean THEN $7::numeric ELSE taxable_amount END,
-        net_amount = CASE WHEN $2::boolean THEN $8::numeric ELSE net_amount END,
-        total_amount = CASE WHEN $2::boolean THEN $8::numeric ELSE total_amount END,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $9 RETURNING *`,
-      [
-        nextStatus,
-        updateGst,
-        updateGst ? gstFlag : false,
-        gstFields?.gst_percentage ?? 0,
-        gstFields?.gst_amount ?? 0,
-        gstFields?.gst_number ?? null,
-        gstFields?.taxable_amount ?? 0,
-        gstFields?.net_amount ?? 0,
-        id,
-      ]
-    );
+    let result;
+    if (updateGst) {
+      result = await client.query(
+        `UPDATE orders SET
+          status = $1::varchar,
+          gst_applicable = $2,
+          gst_percentage = $3,
+          gst_amount = $4,
+          gst_number = $5,
+          taxable_amount = $6,
+          net_amount = $7,
+          total_amount = $7,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $8 RETURNING *`,
+        [
+          nextStatus,
+          gstFlag,
+          gstFields.gst_percentage,
+          gstFields.gst_amount,
+          gstFields.gst_number,
+          gstFields.taxable_amount,
+          gstFields.net_amount,
+          id,
+        ]
+      );
+    } else {
+      result = await client.query(
+        `UPDATE orders SET
+          status = $1::varchar,
+          payment_method = CASE
+            WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN 'not_received'
+            ELSE payment_method
+          END,
+          payment_transaction_id = CASE
+            WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN NULL
+            ELSE payment_transaction_id
+          END,
+          payment_remarks = CASE
+            WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN NULL
+            ELSE payment_remarks
+          END,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2 RETURNING *`,
+        [nextStatus, id]
+      );
+    }
 
     const logNote = updateGst
       ? `GST ${gstFlag ? 'enabled' : 'disabled'}, net ₹${gstFields.net_amount}`

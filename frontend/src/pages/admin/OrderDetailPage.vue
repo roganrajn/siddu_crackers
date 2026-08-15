@@ -67,7 +67,7 @@
           <strong>GST:</strong>
           <span class="status-print">{{ gstPrintLabel }}</span>
           <select
-            :value="String(order.gst_applicable === true)"
+            :value="String(orderGstApplicable)"
             class="status-select no-print"
             :disabled="savingGst"
             @change="updateGstApplicable($event.target.value === 'true')"
@@ -172,7 +172,7 @@ import { useOrderStore } from '@/stores/orderStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getPaymentStatusLabel, getPaymentMethodDetail } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
-import { getStoredOrderBreakdown } from '@/utils/orderPricing';
+import { getStoredOrderBreakdown, normalizeBoolean } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 import defaultLogo from '@/assets/logo.png';
 
@@ -231,6 +231,8 @@ const formattedDate = computed(() =>
       })
     : ''
 );
+
+const orderGstApplicable = computed(() => normalizeBoolean(order.value?.gst_applicable, false));
 
 const gstPrintLabel = computed(() => {
   if (!orderBreakdown.value?.gst_applicable) return 'Without GST';
