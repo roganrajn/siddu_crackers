@@ -23,7 +23,10 @@
       </div>
 
       <div class="order-brand-header__invoice">
-        <span class="order-brand-header__invoice-label">Order Invoice</span>
+        <div class="order-brand-header__invoice-head">
+          <span class="order-brand-header__invoice-label">Order Invoice</span>
+          <span v-if="gstEnabled" class="order-brand-header__gstin print-only">GSTIN: 33ABAFD1628C1Z6</span>
+        </div>
         <strong class="order-brand-header__invoice-no">#{{ order.order_number }}</strong>
       </div>
     </div>
@@ -53,7 +56,28 @@
             <option v-for="s in ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
         </p>
-        <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(order.net_amount || order.total_amount) }}</span></p>
+        <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(orderBreakdown?.net_amount ?? order.net_amount ?? order.total_amount) }}</span></p>
+        <p class="print-only"><strong>Billing:</strong> {{ gstEnabled ? 'With GST (18%)' : 'Without GST' }}</p>
+
+        <div class="gst-panel no-print">
+          <label class="gst-panel__label">Billing</label>
+          <div class="gst-toggle">
+            <button
+              type="button"
+              :class="['gst-toggle__btn', { active: !gstEnabled }]"
+              @click="setGst(false)"
+            >
+              Without GST
+            </button>
+            <button
+              type="button"
+              :class="['gst-toggle__btn', { active: gstEnabled }]"
+              @click="setGst(true)"
+            >
+              With GST (18%)
+            </button>
+          </div>
+        </div>
 
         <div v-if="showPaymentPanel" class="payment-panel no-print">
           <button type="button" class="payment-panel__toggle" @click="paymentExpanded = !paymentExpanded">
@@ -65,6 +89,35 @@
           </button>
 
           <div v-if="paymentExpanded" class="payment-panel__body">
+            <div v-if="orderBreakdown" class="payment-breakdown">
+              <div class="payment-breakdown__row">
+                <span>Sub Total</span>
+                <span>{{ formatPrice(orderBreakdown.subtotal_mrp) }}</span>
+              </div>
+              <div class="payment-breakdown__row">
+                <span>{{ orderBreakdown.discount_label || 'Discount' }}</span>
+                <span class="payment-breakdown__negative">-{{ formatPrice(orderBreakdown.discount_amount) }}</span>
+              </div>
+              <div class="payment-breakdown__row">
+                <span>After Discount</span>
+                <span>{{ formatPrice(orderBreakdown.after_discount) }}</span>
+              </div>
+              <div class="payment-breakdown__row">
+                <span>Packing ({{ formatPct(orderBreakdown.packing_percentage) }})</span>
+                <span>{{ formatPrice(orderBreakdown.packing_amount) }}</span>
+              </div>
+              <template v-if="orderBreakdown.gst_enabled">
+                <div class="payment-breakdown__row">
+                  <span>GST ({{ formatPct(orderBreakdown.gst_rate) }} on After Discount)</span>
+                  <span>{{ formatPrice(orderBreakdown.gst_amount) }}</span>
+                </div>
+              </template>
+              <div class="payment-breakdown__row payment-breakdown__row--net">
+                <span>{{ orderBreakdown.gst_enabled ? 'Net Amount (incl. GST)' : 'Net Amount' }}</span>
+                <strong>{{ formatPrice(orderBreakdown.net_amount) }}</strong>
+              </div>
+            </div>
+
             <div class="payment-form payment-form--compact">
               <div class="form-group">
                 <label>Method</label>
@@ -125,6 +178,18 @@
       <p><strong>Status:</strong> {{ paymentStatusLabel }}<span v-if="paymentMethodDetail"> · {{ paymentMethodDetail }}</span></p>
       <p v-if="order.payment_transaction_id"><strong>Transaction ID:</strong> {{ order.payment_transaction_id }}</p>
       <p v-if="order.payment_remarks"><strong>Remarks:</strong> {{ order.payment_remarks }}</p>
+      <div v-if="orderBreakdown" class="payment-breakdown payment-breakdown--print">
+        <div class="payment-breakdown__row payment-breakdown__row--net">
+          <span>{{ orderBreakdown.gst_enabled ? 'Net Amount (incl. GST)' : 'Net Amount' }}</span>
+          <strong>{{ formatPrice(orderBreakdown.net_amount) }}</strong>
+        </div>
+        <template v-if="orderBreakdown.gst_enabled">
+          <div class="payment-breakdown__row">
+            <span>GST ({{ formatPct(orderBreakdown.gst_rate) }} on After Discount)</span>
+            <span>{{ formatPrice(orderBreakdown.gst_amount) }}</span>
+          </div>
+        </template>
+      </div>
     </div>
 
     <div class="detail-card items-card">
@@ -145,7 +210,7 @@ import { useOrderStore } from '@/stores/orderStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getPaymentStatusLabel, getPaymentMethodDetail } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
-import { getStoredOrderBreakdown } from '@/utils/orderPricing';
+import { getStoredOrderBreakdown, applyGstToBreakdown } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 import defaultLogo from '@/assets/logo.png';
 
@@ -157,6 +222,7 @@ const items = ref([]);
 const savingPayment = ref(false);
 const paymentError = ref('');
 const paymentExpanded = ref(false);
+const gstEnabled = ref(false);
 
 const PAYMENT_ENTRY_METHODS = PAYMENT_METHODS.filter((m) => m.value !== 'not_received');
 
@@ -203,7 +269,18 @@ const formattedDate = computed(() =>
     : ''
 );
 
-const orderBreakdown = computed(() => (order.value ? getStoredOrderBreakdown(order.value) : null));
+const orderBreakdown = computed(() => {
+  if (!order.value) return null;
+  const base = getStoredOrderBreakdown(order.value);
+  if (!base) return null;
+  return applyGstToBreakdown(base, gstEnabled.value);
+});
+
+function formatPct(value) {
+  const num = parseFloat(value);
+  if (Number.isNaN(num)) return '0%';
+  return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2).replace(/\.?0+$/, '')}%`;
+}
 
 const companyName = computed(() =>
   (settingsStore.settings.company_name || 'Siddu Crackers').toUpperCase()
@@ -212,11 +289,30 @@ const companyPhone = computed(() => settingsStore.settings.phone || settingsStor
 const companyEmail = computed(() => settingsStore.settings.email || '');
 const logoSrc = computed(() => settingsStore.settings.logo || defaultLogo);
 
+function gstStorageKey(orderId) {
+  return `siddu_order_gst_${orderId}`;
+}
+
+function loadGstPreference(orderId) {
+  try {
+    return sessionStorage.getItem(gstStorageKey(orderId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveGstPreference(orderId, enabled) {
+  try {
+    sessionStorage.setItem(gstStorageKey(orderId), enabled ? '1' : '0');
+  } catch { /* non-critical */ }
+}
+
 onMounted(async () => {
   await settingsStore.fetchSettings();
   const data = await orderStore.fetchOrder(route.params.id);
   order.value = data.order;
   items.value = data.items;
+  gstEnabled.value = route.query.gst === '1' || loadGstPreference(route.params.id);
   syncPaymentForm();
 
   if (route.query.print) {
@@ -269,6 +365,14 @@ async function savePayment() {
     paymentError.value = e.response?.data?.error || 'Failed to save payment';
   } finally {
     savingPayment.value = false;
+  }
+}
+
+async function setGst(enabled) {
+  if (gstEnabled.value === enabled) return;
+  gstEnabled.value = enabled;
+  if (order.value?.id) {
+    saveGstPreference(order.value.id, enabled);
   }
 }
 </script>
@@ -344,6 +448,23 @@ async function savePayment() {
     text-align: right;
     padding-left: 16px;
     border-left: 1px solid $border;
+  }
+
+  &__invoice-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 4px;
+    width: 100%;
+  }
+
+  &__gstin {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: $text-dark;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
   }
 
   &__invoice-label {
@@ -454,6 +575,95 @@ async function savePayment() {
   margin-top: 20px;
 }
 
+.gst-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid $border;
+}
+
+.gst-panel__label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: $primary;
+  margin-bottom: 8px;
+}
+
+.gst-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.gst-toggle__btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid $border;
+  border-radius: $radius-sm;
+  background: $white;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: $transition;
+
+  &:hover:not(:disabled) {
+    border-color: $primary;
+  }
+
+  &.active {
+    border-color: $primary;
+    background: rgba($primary, 0.08);
+    color: $primary-dark;
+  }
+}
+
+.payment-breakdown {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  background: rgba($primary, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.payment-breakdown__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+
+  span:last-child,
+  strong {
+    font-weight: 600;
+    text-align: right;
+  }
+}
+
+.payment-breakdown__negative {
+  color: #b91c1c;
+}
+
+.payment-breakdown__row--net {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid $border;
+  font-size: 0.95rem;
+
+  strong {
+    color: $primary;
+    font-size: 1.05rem;
+  }
+}
+
+.payment-breakdown--print {
+  margin-top: 10px;
+  margin-bottom: 0;
+  background: transparent;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -554,63 +764,147 @@ async function savePayment() {
 
   .order-print-page {
     padding: 0;
+    font-size: 0.9rem;
   }
 
   .order-brand-header {
     box-shadow: none;
     border: 1px solid #ddd;
-    margin-bottom: 24px;
-    padding: 16px 20px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
     page-break-inside: avoid;
+    page-break-after: avoid;
 
     &__logo {
-      height: 88px;
-      max-width: 130px;
+      height: 72px;
+      max-width: 110px;
     }
 
     &__name {
-      font-size: 1.4rem;
+      font-size: 1.25rem;
     }
 
     &__contact {
-      font-size: 0.88rem;
+      font-size: 0.82rem;
     }
 
     &__invoice {
       border-left-color: #ccc;
+      min-width: 220px;
+
+      &-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        width: 100%;
+        gap: 20px;
+      }
+    }
+
+    &__gstin {
+      font-size: 0.8rem;
+      color: #1a1a1a;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
   }
 
   .order-detail-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    page-break-inside: avoid;
+    gap: 12px;
+    margin-bottom: 12px;
   }
 
   .detail-card {
     box-shadow: none;
     border: 1px solid #ddd;
+    padding: 14px 16px;
     break-inside: avoid;
+    page-break-inside: avoid;
+
+    h3 {
+      margin-bottom: 10px;
+      font-size: 0.95rem;
+    }
+
+    p {
+      margin-bottom: 4px;
+      font-size: 0.82rem;
+    }
+  }
+
+  .payment-card {
+    margin-top: 12px;
+    page-break-inside: avoid;
   }
 
   .items-card {
     box-shadow: none;
     border: 1px solid #ddd;
+    padding: 14px 16px;
+    margin-top: 12px;
     page-break-inside: auto;
+
+    h3 {
+      margin-bottom: 10px;
+      font-size: 0.95rem;
+    }
   }
 
-  .admin-table {
-    box-shadow: none;
-    border: 1px solid #ddd;
+  :deep(.order-pricing) {
+    gap: 12px;
+  }
 
+  :deep(.order-pricing__items) {
     th, td {
-      padding: 8px 12px;
-      font-size: 0.85rem;
+      padding: 5px 8px;
+      font-size: 0.78rem;
+    }
+
+    thead {
+      display: table-header-group;
     }
 
     tbody tr {
       break-inside: avoid;
+      page-break-inside: avoid;
     }
+  }
+
+  :deep(.pricing-summary--table) {
+    width: min(100%, 320px);
+    page-break-inside: avoid;
+    break-inside: avoid;
+
+    .pricing-summary__row {
+      padding: 6px 10px;
+      font-size: 0.78rem;
+    }
+
+    .pricing-summary__row--net {
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      background: #fff !important;
+      color: #1a1a1a !important;
+      border-top: 2px solid #1a1a1a !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+
+      span,
+      strong {
+        color: #1a1a1a !important;
+        font-weight: 700 !important;
+      }
+
+      strong {
+        font-size: 0.95rem !important;
+      }
+    }
+  }
+
+  .detail-card .total {
+    color: #1a1a1a !important;
+    font-weight: 800 !important;
   }
 }
 </style>

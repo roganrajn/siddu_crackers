@@ -7,6 +7,8 @@ export const DEFAULT_ORDER_SETTINGS = {
   order_packing_percentage: 5,
 };
 
+export const DEFAULT_GST_RATE = 18;
+
 export function normalizeOrderSettings(settings = {}) {
   return {
     min_order_amount: parseFloat(settings.min_order_amount ?? DEFAULT_ORDER_SETTINGS.min_order_amount),
@@ -70,6 +72,24 @@ export function calculateOrderBreakdown(items, settings = {}) {
     packing_amount: packingAmount,
     net_amount: netAmount,
     min_order_amount: cfg.min_order_amount,
+  };
+}
+
+export function applyGstToBreakdown(breakdown, gstEnabled, gstRate = DEFAULT_GST_RATE) {
+  const taxableAmount = roundMoney(parseFloat(breakdown.after_discount ?? 0));
+  const packingAmount = roundMoney(parseFloat(breakdown.packing_amount ?? 0));
+  const rate = parseFloat(gstRate ?? DEFAULT_GST_RATE);
+  const enabled = Boolean(gstEnabled);
+  const gstAmount = enabled ? roundMoney(taxableAmount * rate / 100) : 0;
+  const netAmount = roundMoney(taxableAmount + packingAmount + gstAmount);
+
+  return {
+    ...breakdown,
+    amount_before_gst: taxableAmount,
+    gst_enabled: enabled,
+    gst_rate: rate,
+    gst_amount: gstAmount,
+    net_amount: netAmount,
   };
 }
 

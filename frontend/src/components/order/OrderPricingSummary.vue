@@ -18,8 +18,14 @@
         <span>Packing ({{ formatPct(breakdown.packing_percentage) }})</span>
         <span>{{ formatPrice(breakdown.packing_amount) }}</span>
       </div>
+      <template v-if="breakdown.gst_enabled">
+        <div class="pricing-summary__row">
+          <span>GST ({{ formatPct(breakdown.gst_rate) }} on After Discount)</span>
+          <span>{{ formatPrice(breakdown.gst_amount) }}</span>
+        </div>
+      </template>
       <div class="pricing-summary__row pricing-summary__row--net">
-        <span>Net Amount</span>
+        <span>{{ breakdown.gst_enabled ? 'Net Amount (incl. GST)' : 'Net Amount' }}</span>
         <strong>{{ formatPrice(breakdown.net_amount) }}</strong>
       </div>
     </div>
@@ -104,7 +110,7 @@ function formatPct(value) {
   }
 
   .pricing-summary__row--net {
-    background: $primary-dark;
+    background: $primary-dark !important;
     color: $white;
     border-bottom: none;
     margin-top: 0;
@@ -133,6 +139,26 @@ function formatPct(value) {
 @media (max-width: 768px) {
   .pricing-summary--table {
     width: 100%;
+  }
+}
+
+@media print {
+  .pricing-summary--table .pricing-summary__row--net {
+    background: #fff !important;
+    color: #1a1a1a !important;
+    border-top: 2px solid #1a1a1a !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+
+    span,
+    strong {
+      color: #1a1a1a !important;
+      font-weight: 700 !important;
+    }
+
+    strong {
+      font-size: 0.95rem !important;
+    }
   }
 }
 </style>

@@ -131,9 +131,29 @@ function itemKey(item, index) {
   text-align: right;
 }
 
-.order-pricing__legacy-total {
-  text-align: right;
-  font-size: 1.1rem;
-  color: $primary;
+@media print {
+  .order-pricing {
+    gap: 12px;
+  }
+
+  .order-pricing__items-wrap {
+    overflow: visible;
+  }
+
+  .order-pricing__items {
+    thead {
+      display: table-header-group;
+    }
+
+    tbody tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      padding: 5px 8px;
+      font-size: 0.78rem;
+    }
+  }
 }
 </style>
