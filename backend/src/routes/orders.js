@@ -178,23 +178,7 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/:id', authMiddleware, async (req, res) => {
-  try {
-    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
-    if (!orderResult.rows[0]) return res.status(404).json({ error: 'Order not found' });
-
-    const [itemsResult, logsResult] = await Promise.all([
-      pool.query('SELECT * FROM order_items WHERE order_id = $1', [req.params.id]),
-      pool.query('SELECT * FROM order_logs WHERE order_id = $1 ORDER BY created_at ASC', [req.params.id]),
-    ]);
-
-    res.json({ order: orderResult.rows[0], items: itemsResult.rows, logs: logsResult.rows });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-async function handleUpdateBillType(req, res) {
+router.put('/:id/bill-type', authMiddleware, async (req, res) => {
   try {
     const { bill_type } = req.body;
     if (!bill_type) return res.status(400).json({ error: 'bill_type is required' });
@@ -206,11 +190,7 @@ async function handleUpdateBillType(req, res) {
     console.error('Update order bill type error:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
-}
-
-router.put('/:id/bill-type', authMiddleware, handleUpdateBillType);
-router.put('/:id/bill_type', authMiddleware, handleUpdateBillType);
-router.put('/:id', authMiddleware, handleUpdateBillType);
+});
 
 router.put('/:id/payment', authMiddleware, async (req, res) => {
   try {
@@ -227,12 +207,29 @@ router.put('/:id/payment', authMiddleware, async (req, res) => {
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
     const { status, note } = req.body;
+    if (!status) return res.status(400).json({ error: 'status is required' });
     const order = await updateOrderStatus(req.params.id, status, note);
     res.json(order);
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
     if (error.status === 404) return res.status(404).json({ error: error.message });
     console.error('Update order status error:', error.message, error.code || '');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (!orderResult.rows[0]) return res.status(404).json({ error: 'Order not found' });
+
+    const [itemsResult, logsResult] = await Promise.all([
+      pool.query('SELECT * FROM order_items WHERE order_id = $1', [req.params.id]),
+      pool.query('SELECT * FROM order_logs WHERE order_id = $1 ORDER BY created_at ASC', [req.params.id]),
+    ]);
+
+    res.json({ order: orderResult.rows[0], items: itemsResult.rows, logs: logsResult.rows });
+  } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
 });
