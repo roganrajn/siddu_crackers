@@ -18,15 +18,9 @@
         <span>Packing ({{ formatPct(breakdown.packing_percentage) }})</span>
         <span>{{ formatPrice(breakdown.packing_amount) }}</span>
       </div>
-      <div v-if="showGst" class="pricing-summary__row">
-        <span v-if="breakdown.gst_applicable">GST ({{ formatPct(breakdown.gst_percentage) }})</span>
-        <span v-else>GST</span>
-        <span v-if="breakdown.gst_applicable">
-          +{{ formatPrice(breakdown.gst_amount) }}
-        </span>
-        <span v-else class="pricing-summary__not-applicable">
-          Not Applicable
-        </span>
+      <div v-if="showGst && breakdown.gst_applicable" class="pricing-summary__row">
+        <span>GST ({{ formatPct(breakdown.gst_percentage) }})</span>
+        <span>+{{ formatPrice(breakdown.gst_amount) }}</span>
       </div>
       <div v-if="showGstStatus && gstStatusLabel" class="pricing-summary__row pricing-summary__row--gst-status">
         <span>GST Status</span>

@@ -76,10 +76,26 @@ export const useOrderStore = defineStore('order', () => {
   }
 
   async function updateBillType(id, billType) {
-    const { data } = await api.put(`/orders/${id}/bill-type`, { bill_type: billType });
-    const idx = orders.value.findIndex((o) => o.id === id);
-    if (idx !== -1) orders.value[idx] = data;
-    return data;
+    const payload = { bill_type: billType };
+    const endpoints = [
+      `/orders/${id}/bill-type`,
+      `/orders/${id}/bill_type`,
+      `/orders/${id}`,
+    ];
+
+    let lastError;
+    for (const url of endpoints) {
+      try {
+        const { data } = await api.put(url, payload);
+        const idx = orders.value.findIndex((o) => o.id === id);
+        if (idx !== -1) orders.value[idx] = data;
+        return data;
+      } catch (e) {
+        lastError = e;
+        if (e.response?.status !== 404) throw e;
+      }
+    }
+    throw lastError;
   }
 
   async function updatePayment(id, paymentData) {

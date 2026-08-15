@@ -122,7 +122,9 @@ function formatPct(value) {
 }
 
 function resolveOrderBreakdown(order, items, settings) {
-  return getStoredOrderBreakdown(order) || calculateOrderBreakdown(items, settings);
+  const stored = getStoredOrderBreakdown(order, settings);
+  if (stored) return stored;
+  return calculateOrderBreakdown(items, settings, order.state);
 }
 
 function buildSummaryRows(order, items, settings) {
@@ -135,12 +137,9 @@ function buildSummaryRows(order, items, settings) {
         <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">GST (${formatPct(breakdown.gst_percentage)})</td>
         <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">+${formatCurrency(breakdown.gst_amount)}</td>
       </tr>`
-    : `<tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">GST</td>
-        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;color:#6B5A62;">Not Applicable</td>
-      </tr>`;
+    : '';
 
-  const gstinRow = breakdown.gst_number
+  const gstinRow = breakdown.gst_applicable && breakdown.gst_number
     ? `<tr>
         <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">GSTIN</td>
         <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;font-weight:700;">${breakdown.gst_number}</td>
