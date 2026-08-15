@@ -2,8 +2,10 @@ import pool from '../config/db.js';
 import { sendOrderEmails } from './email.service.js';
 import {
   calculateOrderBreakdown,
+  calculateGst,
+  roundMoney,
   normalizeOrderSettings,
-  resolveBillType,
+  normalizeBoolean,
 } from '../utils/orderPricing.js';
 
 const VALID_STATUSES = ['new', 'confirmed', 'paid', 'cancelled'];
@@ -207,8 +209,7 @@ export async function createOrder(orderData) {
 
     const orderSettings = await getOrderSettings(client);
     const orderItems = await resolveOrderItems(client, items);
-    const billType = resolveBillType(state, orderSettings);
-    const breakdown = calculateOrderBreakdown(orderItems, { ...orderSettings, bill_type: billType }, state);
+    const breakdown = calculateOrderBreakdown(orderItems, orderSettings, state);
 
     if (breakdown.net_amount < breakdown.min_order_amount) {
       const err = new Error(
@@ -295,10 +296,53 @@ export async function createOrder(orderData) {
   }
 }
 
-export async function updateOrderStatus(orderId, status, note = null) {
-  const normalized = normalizeStatus(status);
-  if (!VALID_STATUSES.includes(normalized)) {
+function parseGstFlag(payload = {}) {
+  if (payload.gst_applicable === undefined || payload.gst_applicable === null || payload.gst_applicable === '') {
+    return null;
+  }
+  return normalizeBoolean(payload.gst_applicable, false);
+}
+
+function buildGstUpdateFields(order, settings, gstFlag) {
+  const afterDiscount = parseFloat(order.after_discount ?? 0);
+  const packingAmount = parseFloat(order.packing_amount ?? 0);
+  const afterPacking = roundMoney(afterDiscount + packingAmount);
+  const gstPercentage = gstFlag ? parseFloat(settings.gst_percentage || 18) : 0;
+  const gstAmount = gstFlag ? calculateGst(afterPacking, gstPercentage) : 0;
+  const netAmount = roundMoney(afterPacking + gstAmount);
+
+  return {
+    gst_applicable: gstFlag,
+    gst_percentage: gstPercentage,
+    gst_amount: gstAmount,
+    gst_number: gstFlag ? (settings.gst_number || order.gst_number) : order.gst_number,
+    taxable_amount: gstFlag ? afterPacking : 0,
+    net_amount: netAmount,
+    total_amount: netAmount,
+  };
+}
+
+/**
+ * Update order status and/or GST on the same row.
+ * Amounts follow gst_applicable: true adds GST %, false removes it.
+ */
+export async function updateOrderStatus(orderId, statusOrPayload, note = null) {
+  const payload = (statusOrPayload && typeof statusOrPayload === 'object' && !Array.isArray(statusOrPayload))
+    ? statusOrPayload
+    : { status: statusOrPayload, note };
+
+  const gstFlag = parseGstFlag(payload);
+  const hasStatus = payload.status != null && String(payload.status).trim() !== '';
+  const normalized = hasStatus ? normalizeStatus(payload.status) : null;
+
+  if (hasStatus && !VALID_STATUSES.includes(normalized)) {
     const err = new Error('Invalid status');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!hasStatus && gstFlag == null) {
+    const err = new Error('status is required');
     err.status = 400;
     throw err;
   }
@@ -314,34 +358,63 @@ export async function updateOrderStatus(orderId, status, note = null) {
   try {
     await client.query('BEGIN');
 
-    const result = await client.query(
-      `UPDATE orders SET
-        status = $1::varchar,
-        payment_method = CASE
-          WHEN $1::varchar = 'confirmed' THEN 'not_received'
-          ELSE payment_method
-        END,
-        payment_transaction_id = CASE
-          WHEN $1::varchar = 'confirmed' THEN NULL
-          ELSE payment_transaction_id
-        END,
-        payment_remarks = CASE
-          WHEN $1::varchar = 'confirmed' THEN NULL
-          ELSE payment_remarks
-        END,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2 RETURNING *`,
-      [normalized, id]
-    );
-
-    if (!result.rows[0]) {
+    const existing = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (!existing.rows[0]) {
       await client.query('ROLLBACK');
       const err = new Error('Order not found');
       err.status = 404;
       throw err;
     }
 
-    await logOrderStatus(client, id, normalized, note || `Status changed to ${normalized}`);
+    const order = existing.rows[0];
+    const nextStatus = normalized || order.status;
+    const updateGst = gstFlag != null;
+    const gstFields = updateGst
+      ? buildGstUpdateFields(order, await getOrderSettings(client), gstFlag)
+      : null;
+
+    const result = await client.query(
+      `UPDATE orders SET
+        status = $1::varchar,
+        payment_method = CASE
+          WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN 'not_received'
+          ELSE payment_method
+        END,
+        payment_transaction_id = CASE
+          WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN NULL
+          ELSE payment_transaction_id
+        END,
+        payment_remarks = CASE
+          WHEN $1::varchar = 'confirmed' AND $1::varchar IS DISTINCT FROM status THEN NULL
+          ELSE payment_remarks
+        END,
+        gst_applicable = CASE WHEN $2::boolean THEN $3::boolean ELSE gst_applicable END,
+        gst_percentage = CASE WHEN $2::boolean THEN $4::numeric ELSE gst_percentage END,
+        gst_amount = CASE WHEN $2::boolean THEN $5::numeric ELSE gst_amount END,
+        gst_number = CASE WHEN $2::boolean THEN $6 ELSE gst_number END,
+        taxable_amount = CASE WHEN $2::boolean THEN $7::numeric ELSE taxable_amount END,
+        net_amount = CASE WHEN $2::boolean THEN $8::numeric ELSE net_amount END,
+        total_amount = CASE WHEN $2::boolean THEN $8::numeric ELSE total_amount END,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $9 RETURNING *`,
+      [
+        nextStatus,
+        updateGst,
+        updateGst ? gstFlag : false,
+        gstFields?.gst_percentage ?? 0,
+        gstFields?.gst_amount ?? 0,
+        gstFields?.gst_number ?? null,
+        gstFields?.taxable_amount ?? 0,
+        gstFields?.net_amount ?? 0,
+        id,
+      ]
+    );
+
+    const logNote = updateGst
+      ? `GST ${gstFlag ? 'enabled' : 'disabled'}, net ₹${gstFields.net_amount}`
+      : (payload.note || note || `Status changed to ${nextStatus}`);
+
+    await logOrderStatus(client, id, nextStatus, logNote);
     await client.query('COMMIT');
 
     return result.rows[0];
@@ -357,89 +430,8 @@ export async function updateOrderStatus(orderId, status, note = null) {
   }
 }
 
-export async function updateOrderBillType(orderId, billType) {
-  const id = parseInt(orderId, 10);
-  if (!id) {
-    const err = new Error('Invalid order id');
-    err.status = 400;
-    throw err;
-  }
-
-  const normalizedBillType = String(billType ?? '').trim().toLowerCase();
-  if (!['with_gst', 'without_gst'].includes(normalizedBillType)) {
-    const err = new Error('Bill type must be with_gst or without_gst');
-    err.status = 400;
-    throw err;
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
-    if (!orderResult.rows[0]) {
-      const err = new Error('Order not found');
-      err.status = 404;
-      throw err;
-    }
-
-    const order = orderResult.rows[0];
-    const settings = await getOrderSettings(client);
-    const itemRows = await client.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
-    const breakdown = calculateOrderBreakdown(itemRows.rows, { ...settings, bill_type: normalizedBillType }, order.state);
-
-    const result = await client.query(
-      `UPDATE orders SET
-        subtotal_mrp = $1,
-        discount_percentage = $2,
-        discount_amount = $3,
-        after_discount = $4,
-        special_discount_percentage = $5,
-        special_discount_amount = $6,
-        after_special_discount = $7,
-        packing_percentage = $8,
-        packing_amount = $9,
-        total_amount = $10,
-        bill_type = $11,
-        gst_applicable = $12,
-        gst_percentage = $13,
-        gst_amount = $14,
-        gst_number = $15,
-        taxable_amount = $16,
-        net_amount = $17,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $18 RETURNING *`,
-      [
-        breakdown.subtotal_mrp,
-        breakdown.discount_percentage,
-        breakdown.discount_amount,
-        breakdown.after_discount,
-        breakdown.special_discount_percentage,
-        breakdown.special_discount_amount,
-        breakdown.after_special_discount,
-        breakdown.packing_percentage,
-        breakdown.packing_amount,
-        breakdown.net_amount,
-        normalizedBillType,
-        breakdown.gst_applicable,
-        breakdown.gst_percentage,
-        breakdown.gst_amount,
-        breakdown.gst_number,
-        breakdown.taxable_amount,
-        breakdown.net_amount,
-        id,
-      ]
-    );
-
-    await logOrderStatus(client, id, order.status || 'new', `Bill type changed to ${normalizedBillType}`);
-    await client.query('COMMIT');
-    return result.rows[0];
-  } catch (error) {
-    try { await client.query('ROLLBACK'); } catch {}
-    throw error;
-  } finally {
-    client.release();
-  }
+export async function updateOrderGst(orderId, gstApplicable) {
+  return updateOrderStatus(orderId, { gst_applicable: gstApplicable });
 }
 
 export async function updateOrderPayment(orderId, paymentData) {

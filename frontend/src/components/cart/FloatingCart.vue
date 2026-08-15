@@ -59,6 +59,7 @@
               :breakdown="cartStore.pricing"
               variant="compact"
               :show-title="false"
+              :show-gst="false"
             />
             <p v-if="!cartStore.meetsMinOrder" class="cart-drawer__min">
               Min order {{ formatPrice(cartStore.pricing.min_order_amount) }}

@@ -60,22 +60,23 @@
         <p v-else-if="orderBreakdown">
           <strong>GST:</strong> Not Applicable
         </p>
-        <p v-if="order.gst_number || orderBreakdown?.gst_number">
+        <p v-if="orderBreakdown?.gst_applicable && (order.gst_number || orderBreakdown?.gst_number)">
           <strong>GSTIN:</strong> {{ order.gst_number || orderBreakdown?.gst_number }}
         </p>
         <p class="status-row">
-          <strong>Bill Type:</strong>
+          <strong>GST:</strong>
+          <span class="status-print">{{ gstPrintLabel }}</span>
           <select
-            :value="order.bill_type || (order.gst_applicable ? 'with_gst' : 'without_gst')"
+            :value="String(order.gst_applicable === true)"
             class="status-select no-print"
-            :disabled="savingBillType"
-            @change="updateBillType($event.target.value)"
+            :disabled="savingGst"
+            @change="updateGstApplicable($event.target.value === 'true')"
           >
-            <option value="with_gst">With GST</option>
-            <option value="without_gst">Without GST</option>
+            <option value="false">Without GST</option>
+            <option value="true">With GST</option>
           </select>
         </p>
-        <p v-if="billTypeError" class="bill-type-error no-print">{{ billTypeError }}</p>
+        <p v-if="gstError" class="bill-type-error no-print">{{ gstError }}</p>
 
         <div v-if="showPaymentPanel" class="payment-panel no-print">
           <button type="button" class="payment-panel__toggle" @click="paymentExpanded = !paymentExpanded">
@@ -181,9 +182,9 @@ const settingsStore = useSettingsStore();
 const order = ref(null);
 const items = ref([]);
 const savingPayment = ref(false);
-const savingBillType = ref(false);
+const savingGst = ref(false);
 const paymentError = ref('');
-const billTypeError = ref('');
+const gstError = ref('');
 const paymentExpanded = ref(false);
 
 const PAYMENT_ENTRY_METHODS = PAYMENT_METHODS.filter((m) => m.value !== 'not_received');
@@ -230,6 +231,11 @@ const formattedDate = computed(() =>
       })
     : ''
 );
+
+const gstPrintLabel = computed(() => {
+  if (!orderBreakdown.value?.gst_applicable) return 'Without GST';
+  return `With GST (${orderBreakdown.value.gst_percentage}%)`;
+});
 
 const orderBreakdown = computed(() => (order.value ? getStoredOrderBreakdown(order.value, settingsStore.settings) : null));
 
@@ -287,16 +293,23 @@ async function updateStatus(status) {
   paymentExpanded.value = false;
 }
 
-async function updateBillType(billType) {
-  billTypeError.value = '';
-  savingBillType.value = true;
+async function updateGstApplicable(gstApplicable) {
+  gstError.value = '';
+  savingGst.value = true;
   try {
-    const updated = await orderStore.updateBillType(order.value.id, billType);
+    const updated = await orderStore.updateGstApplicable(
+      order.value.id,
+      gstApplicable,
+      displayStatus.value
+    );
     order.value = { ...order.value, ...updated };
+    const fresh = await orderStore.fetchOrder(order.value.id);
+    order.value = fresh.order;
+    items.value = fresh.items;
   } catch (e) {
-    billTypeError.value = e.response?.data?.error || 'Failed to update bill type';
+    gstError.value = e.response?.data?.error || 'Failed to update GST';
   } finally {
-    savingBillType.value = false;
+    savingGst.value = false;
   }
 }
 

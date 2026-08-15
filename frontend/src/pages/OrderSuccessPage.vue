@@ -23,11 +23,11 @@
             <span>Total Amount</span>
             <strong>{{ formatPrice(orderTotal) }}</strong>
           </div>
-          <div v-if="gstStatusLabel" class="order-info__item order-info__item--wide">
+          <div v-if="orderBreakdown?.gst_applicable" class="order-info__item order-info__item--wide">
             <span>GST Status</span>
             <strong>{{ gstStatusLabel }}</strong>
           </div>
-          <div v-if="gstNumber" class="order-info__item order-info__item--wide">
+          <div v-if="orderBreakdown?.gst_applicable && gstNumber" class="order-info__item order-info__item--wide">
             <span>GSTIN</span>
             <strong>{{ gstNumber }}</strong>
           </div>

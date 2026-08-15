@@ -75,8 +75,11 @@ export const useOrderStore = defineStore('order', () => {
     return data;
   }
 
-  async function updateBillType(id, billType) {
-    const { data } = await api.put(`/orders/${id}/bill-type`, { bill_type: billType });
+  async function updateGstApplicable(id, gstApplicable, currentStatus) {
+    const { data } = await api.put(`/orders/${id}/status`, {
+      status: currentStatus,
+      gst_applicable: gstApplicable,
+    });
     const idx = orders.value.findIndex((o) => o.id === id);
     if (idx !== -1) orders.value[idx] = data;
     return data;
@@ -114,7 +117,7 @@ export const useOrderStore = defineStore('order', () => {
     pollNewOrders,
     fetchOrder,
     updateStatus,
-    updateBillType,
+    updateGstApplicable,
     updatePayment,
     exportCSV,
   };

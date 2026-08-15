@@ -14,10 +14,10 @@
         <option value="">All Status</option>
         <option v-for="s in ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
-      <select v-model="billTypeFilter" @change="onFilterChange">
-        <option value="">All Bill Type</option>
-        <option value="with_gst">With GST</option>
-        <option value="without_gst">Without GST</option>
+      <select v-model="gstFilter" @change="onFilterChange">
+        <option value="">All GST</option>
+        <option value="true">With GST</option>
+        <option value="false">Without GST</option>
       </select>
     </div>
 
@@ -91,7 +91,7 @@ const orderStore = useOrderStore();
 const orders = ref([]);
 const search = ref('');
 const statusFilter = ref('');
-const billTypeFilter = ref('');
+const gstFilter = ref('');
 const page = ref(1);
 const totalPages = ref(1);
 const loading = ref(false);
@@ -126,7 +126,7 @@ function getOrderQueryParams() {
     page: page.value,
     limit: 10,
     status: statusFilter.value || undefined,
-    bill_type: billTypeFilter.value || undefined,
+    gst_applicable: gstFilter.value || undefined,
     search: search.value || undefined,
     ...getDateRangeParams(),
   };

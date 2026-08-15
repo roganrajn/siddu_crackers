@@ -96,7 +96,7 @@
         </div>
       </div>
       <p class="settings-note">
-        GST applies to orders from all states except Tamil Nadu and Puducherry. GST is calculated on the amount after discount and packing charges.
+        When enabled, GST applies at checkout for all states except Tamil Nadu and Puducherry/Pondicherry. Cart stays without GST until a state is selected. If disabled, GST is never applied. You can still switch With/Without GST on an individual order when GST is enabled.
       </p>
 
       <h3 class="section-label">SEO & Analytics</h3>

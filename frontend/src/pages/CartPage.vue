@@ -40,7 +40,7 @@
 
         <div class="cart-summary">
           <h3>Order Summary</h3>
-          <OrderPricingTables :items="cartStore.items" :breakdown="cartStore.pricing" />
+          <OrderPricingTables :items="cartStore.items" :breakdown="cartStore.pricing" :show-gst="false" />
 
           <p v-if="!cartStore.meetsMinOrder" class="min-order-warning">
             Add {{ formatPrice(cartStore.minOrderRemaining) }} more to reach minimum order of

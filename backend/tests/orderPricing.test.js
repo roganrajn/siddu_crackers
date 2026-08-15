@@ -2,92 +2,95 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateOrderBreakdown,
-  resolveBillType,
+  resolveGstApplicableFromState,
+  getStoredOrderBreakdown,
+  getOrderGstApplicable,
 } from '../src/utils/orderPricing.js';
 
-test('resolveBillType defaults to with_gst outside exempt states', () => {
-  assert.equal(resolveBillType('Assam', { gst_enabled: true }), 'with_gst');
-  assert.equal(resolveBillType('Kerala', { gst_enabled: true }), 'with_gst');
+const items = [{ product_name: 'Test', price: 100, mrp_price: 100, quantity: 1 }];
+const gstOn = { gst_enabled: true, gst_percentage: 18, order_packing_percentage: 5, gst_number: '33ABAFD1628C1Z6' };
+const gstOff = { ...gstOn, gst_enabled: false };
+
+test('no GST until a delivery state is selected', () => {
+  const breakdown = calculateOrderBreakdown(items, gstOn, '');
+  assert.equal(breakdown.gst_applicable, false);
+  assert.equal(breakdown.gst_amount, 0);
 });
 
-test('resolveBillType defaults to without_gst for exempt states', () => {
-  assert.equal(resolveBillType('Tamil Nadu', { gst_enabled: true }), 'without_gst');
-  assert.equal(resolveBillType('Puducherry', { gst_enabled: true }), 'without_gst');
-  assert.equal(resolveBillType('Pondicherry', { gst_enabled: true }), 'without_gst');
+test('no GST for Tamil Nadu and Pondicherry when GST is enabled', () => {
+  for (const state of ['Tamil Nadu', 'Puducherry', 'Pondicherry']) {
+    const breakdown = calculateOrderBreakdown(items, gstOn, state);
+    assert.equal(resolveGstApplicableFromState(state), false);
+    assert.equal(breakdown.gst_applicable, false);
+    assert.equal(breakdown.gst_amount, 0);
+  }
 });
 
-test('calculateOrderBreakdown applies GST for non-exempt states and skips it for exempt states', () => {
-  const items = [{ product_name: 'Test', price: 100, mrp_price: 100, quantity: 1 }];
-  const nonExempt = calculateOrderBreakdown(items, { gst_enabled: true, gst_percentage: 18, order_packing_percentage: 5 }, 'Assam');
-  const exempt = calculateOrderBreakdown(items, { gst_enabled: true, gst_percentage: 18, order_packing_percentage: 5 }, 'Tamil Nadu');
-
-  assert.equal(nonExempt.gst_applicable, true);
-  assert.equal(nonExempt.gst_amount > 0, true);
-  assert.equal(nonExempt.net_amount > 0, true);
-
-  assert.equal(exempt.gst_applicable, false);
-  assert.equal(exempt.gst_amount, 0);
-  assert.equal(exempt.net_amount, exempt.after_discount + exempt.packing_amount);
-});
-
-test('calculateOrderBreakdown applies GST even when gst_enabled is false for non-exempt states', () => {
-  const items = [{ product_name: 'Test', price: 1900, mrp_price: 9500, quantity: 3 }];
-  const breakdown = calculateOrderBreakdown(items, {
-    gst_enabled: false,
-    gst_percentage: 18,
-    order_packing_percentage: 3,
-    gst_number: '33ABAFD1628C1Z6',
-  }, 'Himachal Pradesh');
-
-  assert.equal(breakdown.bill_type, 'with_gst');
+test('18% GST for other states when GST is enabled', () => {
+  const breakdown = calculateOrderBreakdown(items, gstOn, 'Assam');
   assert.equal(breakdown.gst_applicable, true);
-  assert.equal(breakdown.gst_amount, 1056.78);
-  assert.equal(breakdown.net_amount, 6927.78);
+  assert.equal(breakdown.gst_percentage, 18);
+  assert.equal(breakdown.gst_amount, 21); // (100 + 5 packing) * 18%
+  assert.equal(breakdown.net_amount, 126);
 });
 
-test('getStoredOrderBreakdown recalculates GST from bill_type when stored gst fields are null', async () => {
-  const { getStoredOrderBreakdown } = await import('../src/utils/orderPricing.js');
-  const breakdown = getStoredOrderBreakdown({
+test('GST disabled in settings means no GST at checkout unless admin forces it', () => {
+  const otherState = calculateOrderBreakdown(items, gstOff, 'Assam');
+  const tn = calculateOrderBreakdown(items, gstOff, 'Tamil Nadu');
+  const forced = calculateOrderBreakdown(items, { ...gstOff, gst_applicable: true }, 'Assam');
+
+  assert.equal(otherState.gst_applicable, false);
+  assert.equal(otherState.gst_amount, 0);
+  assert.equal(tn.gst_applicable, false);
+  assert.equal(forced.gst_applicable, true);
+  assert.equal(forced.gst_amount, 21);
+});
+
+test('admin can force GST off for a non-exempt state when GST is enabled', () => {
+  const breakdown = calculateOrderBreakdown(items, { ...gstOn, gst_applicable: false }, 'Assam');
+  assert.equal(breakdown.gst_applicable, false);
+  assert.equal(breakdown.gst_amount, 0);
+});
+
+test('admin can force GST on when GST is enabled', () => {
+  const breakdown = calculateOrderBreakdown(items, { ...gstOn, gst_applicable: true }, 'Tamil Nadu');
+  assert.equal(breakdown.gst_applicable, true);
+  assert.equal(breakdown.gst_amount, 21);
+});
+
+test('getOrderGstApplicable defaults to false', () => {
+  assert.equal(getOrderGstApplicable({ gst_applicable: null }), false);
+  assert.equal(getOrderGstApplicable({ gst_applicable: true }), true);
+  assert.equal(getOrderGstApplicable({ gst_applicable: false }), false);
+});
+
+test('stored orders keep their own GST flag for display', () => {
+  const withoutGst = getStoredOrderBreakdown({
     subtotal_mrp: 28500,
     after_discount: 5700,
     discount_amount: 22800,
     packing_percentage: 3,
     packing_amount: 171,
     net_amount: 5871,
-    total_amount: 5871,
-    bill_type: 'with_gst',
-    state: 'Himachal Pradesh',
-    gst_applicable: null,
-    gst_amount: null,
-    gst_percentage: null,
-  }, { gst_percentage: 18, gst_number: '33ABAFD1628C1Z6' });
+    gst_applicable: false,
+  }, gstOn);
 
-  assert.equal(breakdown.gst_applicable, true);
-  assert.equal(breakdown.gst_amount, 1056.78);
-  assert.equal(breakdown.net_amount, 6927.78);
-});
-
-test('calculateOrderBreakdown respects explicit bill type override and keeps GSTIN', () => {
-  const items = [{ product_name: 'Test', price: 100, mrp_price: 100, quantity: 1 }];
-  const withGst = calculateOrderBreakdown(items, {
-    gst_enabled: true,
-    gst_percentage: 18,
-    order_packing_percentage: 5,
-    gst_number: '33ABAFD1628C1Z6',
-    bill_type: 'with_gst',
-  }, 'Assam');
-  const withoutGst = calculateOrderBreakdown(items, {
-    gst_enabled: true,
-    gst_percentage: 18,
-    order_packing_percentage: 5,
-    gst_number: '33ABAFD1628C1Z6',
-    bill_type: 'without_gst',
-  }, 'Assam');
-
-  assert.equal(withGst.gst_applicable, true);
-  assert.equal(withGst.gst_amount, 21);
   assert.equal(withoutGst.gst_applicable, false);
   assert.equal(withoutGst.gst_amount, 0);
-  assert.equal(withoutGst.gst_number, '33ABAFD1628C1Z6');
-  assert.equal(withoutGst.net_amount, withoutGst.after_discount + withoutGst.packing_amount);
+  assert.equal(withoutGst.net_amount, 5871);
+
+  const withGst = getStoredOrderBreakdown({
+    subtotal_mrp: 28500,
+    after_discount: 5700,
+    discount_amount: 22800,
+    packing_percentage: 3,
+    packing_amount: 171,
+    net_amount: 6927.78,
+    gst_applicable: true,
+    gst_percentage: 18,
+  }, gstOn);
+
+  assert.equal(withGst.gst_applicable, true);
+  assert.equal(withGst.gst_amount, 1056.78);
+  assert.equal(withGst.net_amount, 6927.78);
 });

@@ -5,7 +5,6 @@ import {
   createOrder,
   updateOrderStatus,
   updateOrderPayment,
-  updateOrderBillType,
   CUSTOMER_STATUS_MAP,
   normalizeStatus,
 } from '../services/order.service.js';
@@ -14,7 +13,7 @@ import { buildOrderDateFilter } from '../utils/dateFilter.js';
 const router = express.Router();
 
 function buildOrderFilters(query) {
-  const { status, search, since, date_from, date_to, bill_type } = query;
+  const { status, search, since, date_from, date_to, gst_applicable } = query;
   const where = [];
   const params = [];
   let paramIndex = 1;
@@ -23,9 +22,9 @@ function buildOrderFilters(query) {
     where.push(`status = $${paramIndex++}`);
     params.push(status);
   }
-  if (bill_type) {
-    where.push(`bill_type = $${paramIndex++}`);
-    params.push(bill_type);
+  if (gst_applicable !== undefined && gst_applicable !== '') {
+    where.push(`gst_applicable = $${paramIndex++}`);
+    params.push(gst_applicable === 'true');
   }
   if (search) {
     where.push(`(order_number ILIKE $${paramIndex} OR customer_name ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
@@ -112,8 +111,7 @@ router.post('/track', async (req, res) => {
         after_special_discount: order.after_special_discount,
         packing_percentage: order.packing_percentage,
         packing_amount: order.packing_amount,
-        bill_type: order.bill_type || 'with_gst',
-        gst_applicable: order.gst_applicable,
+        gst_applicable: order.gst_applicable === true,
         gst_percentage: order.gst_percentage,
         gst_amount: order.gst_amount,
         gst_number: order.gst_number,
@@ -178,20 +176,6 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-router.put('/:id/bill-type', authMiddleware, async (req, res) => {
-  try {
-    const { bill_type } = req.body;
-    if (!bill_type) return res.status(400).json({ error: 'bill_type is required' });
-    const order = await updateOrderBillType(req.params.id, bill_type);
-    res.json(order);
-  } catch (error) {
-    if (error.status === 400) return res.status(400).json({ error: error.message });
-    if (error.status === 404) return res.status(404).json({ error: error.message });
-    console.error('Update order bill type error:', error.message);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 router.put('/:id/payment', authMiddleware, async (req, res) => {
   try {
     const order = await updateOrderPayment(req.params.id, req.body);
@@ -206,9 +190,7 @@ router.put('/:id/payment', authMiddleware, async (req, res) => {
 
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
-    const { status, note } = req.body;
-    if (!status) return res.status(400).json({ error: 'status is required' });
-    const order = await updateOrderStatus(req.params.id, status, note);
+    const order = await updateOrderStatus(req.params.id, req.body);
     res.json(order);
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });

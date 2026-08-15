@@ -62,19 +62,22 @@ export async function ensureSchema() {
   `);
 
   await pool.query(`
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS bill_type VARCHAR(20) DEFAULT 'with_gst';
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS bill_type VARCHAR(20) DEFAULT 'without_gst';
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5, 2);
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_amount DECIMAL(10, 2);
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_applicable BOOLEAN;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_applicable BOOLEAN DEFAULT false;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50);
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS taxable_amount DECIMAL(10, 2);
   `);
 
   await pool.query(`
+    UPDATE orders SET gst_applicable = false WHERE gst_applicable IS NULL;
+  `);
+
+  await pool.query(`
     UPDATE orders SET bill_type = CASE
       WHEN gst_applicable = true THEN 'with_gst'
-      WHEN gst_applicable = false THEN 'without_gst'
-      ELSE 'with_gst'
+      ELSE 'without_gst'
     END
     WHERE bill_type IS NULL OR bill_type = '';
   `);
