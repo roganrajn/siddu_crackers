@@ -140,6 +140,13 @@ function buildSummaryRows(order, items, settings) {
         <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;color:#6B5A62;">Not Applicable</td>
       </tr>`;
 
+  const gstinRow = breakdown.gst_number
+    ? `<tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">GSTIN</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;font-weight:700;">${breakdown.gst_number}</td>
+      </tr>`
+    : '';
+
   return `
     <tr>
       <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;">Sub Total</td>
@@ -158,6 +165,7 @@ function buildSummaryRows(order, items, settings) {
       <td style="padding:10px 12px;border-bottom:1px solid #EDE4DC;text-align:right;">${formatCurrency(breakdown.packing_amount)}</td>
     </tr>
     ${gstRow}
+    ${gstinRow}
     <tr style="background:#7D3C5E;color:#ffffff;">
       <td style="padding:12px;font-weight:700;border-bottom:1px solid #7D3C5E;">Net Amount</td>
       <td style="padding:12px;font-weight:700;text-align:right;border-bottom:1px solid #7D3C5E;">${formatCurrency(breakdown.net_amount)}</td>

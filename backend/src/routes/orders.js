@@ -5,6 +5,7 @@ import {
   createOrder,
   updateOrderStatus,
   updateOrderPayment,
+  updateOrderBillType,
   CUSTOMER_STATUS_MAP,
   normalizeStatus,
 } from '../services/order.service.js';
@@ -13,7 +14,7 @@ import { buildOrderDateFilter } from '../utils/dateFilter.js';
 const router = express.Router();
 
 function buildOrderFilters(query) {
-  const { status, search, since, date_from, date_to } = query;
+  const { status, search, since, date_from, date_to, bill_type } = query;
   const where = [];
   const params = [];
   let paramIndex = 1;
@@ -21,6 +22,10 @@ function buildOrderFilters(query) {
   if (status) {
     where.push(`status = $${paramIndex++}`);
     params.push(status);
+  }
+  if (bill_type) {
+    where.push(`bill_type = $${paramIndex++}`);
+    params.push(bill_type);
   }
   if (search) {
     where.push(`(order_number ILIKE $${paramIndex} OR customer_name ILIKE $${paramIndex} OR phone ILIKE $${paramIndex})`);
@@ -107,6 +112,7 @@ router.post('/track', async (req, res) => {
         after_special_discount: order.after_special_discount,
         packing_percentage: order.packing_percentage,
         packing_amount: order.packing_amount,
+        bill_type: order.bill_type || 'with_gst',
         gst_applicable: order.gst_applicable,
         gst_percentage: order.gst_percentage,
         gst_amount: order.gst_amount,
@@ -184,6 +190,20 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
     res.json({ order: orderResult.rows[0], items: itemsResult.rows, logs: logsResult.rows });
   } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { bill_type } = req.body;
+    if (!bill_type) return res.status(400).json({ error: 'bill_type is required' });
+    const order = await updateOrderBillType(req.params.id, bill_type);
+    res.json(order);
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    if (error.status === 404) return res.status(404).json({ error: error.message });
+    console.error('Update order bill type error:', error.message);
     res.status(500).json({ error: 'Server error' });
   }
 });

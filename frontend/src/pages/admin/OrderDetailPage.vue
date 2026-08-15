@@ -54,6 +54,20 @@
           </select>
         </p>
         <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(order.net_amount || order.total_amount) }}</span></p>
+        <p v-if="order.gst_number || orderBreakdown?.gst_number">
+          <strong>GSTIN:</strong> {{ order.gst_number || orderBreakdown?.gst_number }}
+        </p>
+        <p class="status-row">
+          <strong>Bill Type:</strong>
+          <select
+            :value="order.bill_type || (order.gst_applicable ? 'with_gst' : 'without_gst')"
+            class="status-select no-print"
+            @change="updateBillType($event.target.value)"
+          >
+            <option value="with_gst">With GST</option>
+            <option value="without_gst">Without GST</option>
+          </select>
+        </p>
 
         <div v-if="showPaymentPanel" class="payment-panel no-print">
           <button type="button" class="payment-panel__toggle" @click="paymentExpanded = !paymentExpanded">

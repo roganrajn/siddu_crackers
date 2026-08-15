@@ -8,28 +8,61 @@ export const DEFAULT_ORDER_SETTINGS = {
   gst_enabled: true,
   gst_percentage: 18,
   gst_number: '33ABAFD1628C1Z6',
+  bill_type: 'auto',
 };
 
-// States exempt from GST
 export const GST_EXEMPT_STATES = [
   'tamil nadu',
   'puducherry',
   'pondicherry',
 ];
 
+export function normalizeBoolean(value, fallback = false) {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n'].includes(normalized)) return false;
+  }
+  return Boolean(value ?? fallback);
+}
+
+export function normalizeBillType(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'with_gst' || normalized === 'without_gst') return normalized;
+  return 'auto';
+}
+
+export function resolveBillType(state = null, settings = {}) {
+  const explicitType = normalizeBillType(settings.bill_type ?? settings.gst_bill_type);
+  if (explicitType === 'with_gst' || explicitType === 'without_gst') return explicitType;
+
+  if (!state) {
+    return normalizeBoolean(settings.gst_enabled, DEFAULT_ORDER_SETTINGS.gst_enabled)
+      ? 'with_gst'
+      : 'without_gst';
+  }
+
+  const normalizedState = String(state).trim().toLowerCase();
+  return GST_EXEMPT_STATES.includes(normalizedState) ? 'without_gst' : 'with_gst';
+}
+
 export function normalizeOrderSettings(settings = {}) {
   return {
     min_order_amount: parseFloat(settings.min_order_amount ?? DEFAULT_ORDER_SETTINGS.min_order_amount),
     order_packing_percentage: parseFloat(settings.order_packing_percentage ?? DEFAULT_ORDER_SETTINGS.order_packing_percentage),
-    gst_enabled: settings.gst_enabled ?? DEFAULT_ORDER_SETTINGS.gst_enabled,
+    gst_enabled: normalizeBoolean(settings.gst_enabled, DEFAULT_ORDER_SETTINGS.gst_enabled),
     gst_percentage: parseFloat(settings.gst_percentage ?? DEFAULT_ORDER_SETTINGS.gst_percentage),
     gst_number: settings.gst_number ?? DEFAULT_ORDER_SETTINGS.gst_number,
+    bill_type: normalizeBillType(settings.bill_type ?? settings.gst_bill_type ?? DEFAULT_ORDER_SETTINGS.bill_type),
   };
 }
 
 export function isGstApplicable(state, settings = {}) {
-  if (!settings.gst_enabled) return false;
-  if (!state) return false;
+  const cfg = normalizeOrderSettings(settings);
+  const billType = resolveBillType(state, cfg);
+  if (billType === 'without_gst') return false;
+  if (!cfg.gst_enabled) return false;
+  if (!state) return true;
   const normalizedState = state.toLowerCase().trim();
   return !GST_EXEMPT_STATES.includes(normalizedState);
 }
@@ -64,6 +97,7 @@ export function getMaxDiscountPct(items = []) {
  */
 export function calculateOrderBreakdown(items, settings = {}, state = null) {
   const cfg = normalizeOrderSettings(settings);
+  const billType = resolveBillType(state, cfg);
 
   const subtotalMrp = roundMoney(
     items.reduce((sum, item) => sum + getItemMrp(item) * parseInt(item.quantity, 10), 0)
@@ -80,8 +114,7 @@ export function calculateOrderBreakdown(items, settings = {}, state = null) {
   const packingAmount = roundMoney(afterDiscount * cfg.order_packing_percentage / 100);
   const afterPacking = roundMoney(afterDiscount + packingAmount);
 
-  // GST calculation: apply on taxable amount (after discount + packing)
-  const gstApplicable = isGstApplicable(state, cfg);
+  const gstApplicable = billType === 'with_gst' && isGstApplicable(state, cfg);
   const taxableAmount = gstApplicable ? afterPacking : 0;
   const gstAmount = gstApplicable ? calculateGst(afterPacking, cfg.gst_percentage) : 0;
   const netAmount = roundMoney(afterPacking + gstAmount);
@@ -99,6 +132,7 @@ export function calculateOrderBreakdown(items, settings = {}, state = null) {
     after_special_discount: afterDiscount,
     packing_percentage: cfg.order_packing_percentage,
     packing_amount: packingAmount,
+    bill_type: billType,
     gst_applicable: gstApplicable,
     gst_percentage: gstApplicable ? cfg.gst_percentage : 0,
     gst_amount: gstAmount,
@@ -118,6 +152,8 @@ export function getStoredOrderBreakdown(order) {
       : parseFloat(order.after_discount ?? order.subtotal_offer ?? 0);
     const discountAmount = parseFloat(order.discount_amount ?? Math.max(0, subtotalMrp - afterDiscount));
     const discountUptoPct = parseFloat(order.discount_upto_percentage ?? order.discount_percentage ?? 0);
+    const normalizedBillType = normalizeBillType(order.bill_type || 'auto');
+    const effectiveBillType = normalizedBillType === 'auto' ? resolveBillType(order.state, { gst_enabled: order.gst_applicable !== false }) : normalizedBillType;
 
     return {
       subtotal_mrp: subtotalMrp,
@@ -129,6 +165,7 @@ export function getStoredOrderBreakdown(order) {
       after_discount: afterDiscount,
       packing_percentage: parseFloat(order.packing_percentage ?? 0),
       packing_amount: parseFloat(order.packing_amount ?? 0),
+      bill_type: effectiveBillType,
       gst_applicable: order.gst_applicable ?? false,
       gst_percentage: parseFloat(order.gst_percentage ?? 0),
       gst_amount: parseFloat(order.gst_amount ?? 0),

@@ -14,6 +14,11 @@
         <option value="">All Status</option>
         <option v-for="s in ORDER_STATUSES" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
+      <select v-model="billTypeFilter" @change="onFilterChange">
+        <option value="">All Bill Type</option>
+        <option value="with_gst">With GST</option>
+        <option value="without_gst">Without GST</option>
+      </select>
     </div>
 
     <DateRangeFilter
@@ -86,6 +91,7 @@ const orderStore = useOrderStore();
 const orders = ref([]);
 const search = ref('');
 const statusFilter = ref('');
+const billTypeFilter = ref('');
 const page = ref(1);
 const totalPages = ref(1);
 const loading = ref(false);
@@ -120,6 +126,7 @@ function getOrderQueryParams() {
     page: page.value,
     limit: 10,
     status: statusFilter.value || undefined,
+    bill_type: billTypeFilter.value || undefined,
     search: search.value || undefined,
     ...getDateRangeParams(),
   };

@@ -1,6 +1,10 @@
 import pool from '../config/db.js';
 import { sendOrderEmails } from './email.service.js';
-import { calculateOrderBreakdown, normalizeOrderSettings } from '../utils/orderPricing.js';
+import {
+  calculateOrderBreakdown,
+  normalizeOrderSettings,
+  resolveBillType,
+} from '../utils/orderPricing.js';
 
 const VALID_STATUSES = ['new', 'confirmed', 'paid', 'cancelled'];
 
@@ -203,7 +207,8 @@ export async function createOrder(orderData) {
 
     const orderSettings = await getOrderSettings(client);
     const orderItems = await resolveOrderItems(client, items);
-    const breakdown = calculateOrderBreakdown(orderItems, orderSettings, state);
+    const billType = resolveBillType(state, orderSettings);
+    const breakdown = calculateOrderBreakdown(orderItems, { ...orderSettings, bill_type: billType }, state);
 
     if (breakdown.net_amount < breakdown.min_order_amount) {
       const err = new Error(
@@ -220,10 +225,10 @@ export async function createOrder(orderData) {
         order_number, customer_name, phone, whatsapp, email, state, city, address, pincode, remarks,
         total_amount, subtotal_mrp, discount_percentage, discount_amount, after_discount,
         special_discount_percentage, special_discount_amount, after_special_discount,
-        packing_percentage, packing_amount, gst_applicable, gst_percentage, gst_amount, gst_number, taxable_amount, net_amount, status
+        packing_percentage, packing_amount, bill_type, gst_applicable, gst_percentage, gst_amount, gst_number, taxable_amount, net_amount, status
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, 'new'
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, 'new'
       ) RETURNING *`,
       [
         orderNumber,
@@ -246,6 +251,7 @@ export async function createOrder(orderData) {
         breakdown.after_special_discount,
         breakdown.packing_percentage,
         breakdown.packing_amount,
+        breakdown.bill_type,
         breakdown.gst_applicable,
         breakdown.gst_percentage,
         breakdown.gst_amount,
@@ -345,6 +351,91 @@ export async function updateOrderStatus(orderId, status, note = null) {
     } catch {
       // ignore rollback errors
     }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateOrderBillType(orderId, billType) {
+  const id = parseInt(orderId, 10);
+  if (!id) {
+    const err = new Error('Invalid order id');
+    err.status = 400;
+    throw err;
+  }
+
+  const normalizedBillType = String(billType ?? '').trim().toLowerCase();
+  if (!['with_gst', 'without_gst'].includes(normalizedBillType)) {
+    const err = new Error('Bill type must be with_gst or without_gst');
+    err.status = 400;
+    throw err;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (!orderResult.rows[0]) {
+      const err = new Error('Order not found');
+      err.status = 404;
+      throw err;
+    }
+
+    const order = orderResult.rows[0];
+    const settings = await getOrderSettings(client);
+    const itemRows = await client.query('SELECT * FROM order_items WHERE order_id = $1', [id]);
+    const breakdown = calculateOrderBreakdown(itemRows.rows, { ...settings, bill_type: normalizedBillType }, order.state);
+
+    const result = await client.query(
+      `UPDATE orders SET
+        subtotal_mrp = $1,
+        discount_percentage = $2,
+        discount_amount = $3,
+        after_discount = $4,
+        special_discount_percentage = $5,
+        special_discount_amount = $6,
+        after_special_discount = $7,
+        packing_percentage = $8,
+        packing_amount = $9,
+        total_amount = $10,
+        bill_type = $11,
+        gst_applicable = $12,
+        gst_percentage = $13,
+        gst_amount = $14,
+        gst_number = $15,
+        taxable_amount = $16,
+        net_amount = $17,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $18 RETURNING *`,
+      [
+        breakdown.subtotal_mrp,
+        breakdown.discount_percentage,
+        breakdown.discount_amount,
+        breakdown.after_discount,
+        breakdown.special_discount_percentage,
+        breakdown.special_discount_amount,
+        breakdown.after_special_discount,
+        breakdown.packing_percentage,
+        breakdown.packing_amount,
+        breakdown.net_amount,
+        normalizedBillType,
+        breakdown.gst_applicable,
+        breakdown.gst_percentage,
+        breakdown.gst_amount,
+        breakdown.gst_number,
+        breakdown.taxable_amount,
+        breakdown.net_amount,
+        id,
+      ]
+    );
+
+    await logOrderStatus(client, id, order.status || 'new', `Bill type changed to ${normalizedBillType}`);
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch {}
     throw error;
   } finally {
     client.release();

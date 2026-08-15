@@ -23,6 +23,10 @@
             <span>Total Amount</span>
             <strong>{{ formatPrice(orderTotal) }}</strong>
           </div>
+          <div v-if="gstNumber" class="order-info__item order-info__item--wide">
+            <span>GSTIN</span>
+            <strong>{{ gstNumber }}</strong>
+          </div>
         </div>
 
         <div v-if="orderItems.length || orderBreakdown" class="order-summary">
@@ -92,6 +96,7 @@ const orderItems = computed(() => orderData.value?.items || []);
 const orderNum = computed(() => order.value?.order_number || '');
 const orderTotal = computed(() => order.value?.net_amount || order.value?.total_amount || 0);
 const orderBreakdown = computed(() => getStoredOrderBreakdown(order.value));
+const gstNumber = computed(() => order.value?.gst_number || orderBreakdown.value?.gst_number || '');
 const customerName = computed(() => order.value?.customer_name || '');
 const customerPhone = computed(() => order.value?.phone || '');
 
