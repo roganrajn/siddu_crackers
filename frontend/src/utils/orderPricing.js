@@ -60,11 +60,43 @@ export function normalizeOrderSettings(settings = {}) {
 export function isGstApplicable(state, settings = {}) {
   const cfg = normalizeOrderSettings(settings);
   const billType = resolveBillType(state, cfg);
+  return isGstApplicableForBillType(state, cfg, billType, settings);
+}
+
+/** Whether GST applies for a resolved bill type (explicit override ignores state exemption). */
+export function isGstApplicableForBillType(state, cfg, billType, settings = {}) {
   if (billType === 'without_gst') return false;
   if (!cfg.gst_enabled) return false;
+
+  const explicitType = normalizeBillType(settings.bill_type ?? settings.gst_bill_type ?? cfg.bill_type);
+  if (explicitType === 'with_gst') return true;
+  if (explicitType === 'without_gst') return false;
+
   if (!state) return true;
-  const normalizedState = state.toLowerCase().trim();
-  return !GST_EXEMPT_STATES.includes(normalizedState);
+  return !GST_EXEMPT_STATES.includes(String(state).trim().toLowerCase());
+}
+
+export function getGstStatusLabel(breakdown) {
+  if (!breakdown) return '';
+  if (breakdown.gst_applicable && breakdown.gst_percentage > 0) {
+    const pct = Number.isInteger(breakdown.gst_percentage)
+      ? breakdown.gst_percentage
+      : parseFloat(breakdown.gst_percentage).toFixed(2).replace(/\.?0+$/, '');
+    return `GST Applicable – ${pct}%`;
+  }
+  return 'GST Not Applicable';
+}
+
+export function getBillTypeLabel(billType) {
+  const normalized = normalizeBillType(billType);
+  if (normalized === 'with_gst') return 'With GST';
+  if (normalized === 'without_gst') return 'Without GST';
+  return 'Auto';
+}
+
+/** Cart pricing — exclude GST until delivery state is known at checkout. */
+export function calculateCartBreakdown(items, settings = {}) {
+  return calculateOrderBreakdown(items, { ...settings, bill_type: 'without_gst' });
 }
 
 export function calculateGst(taxableAmount, gstPercentage) {
@@ -114,7 +146,7 @@ export function calculateOrderBreakdown(items, settings = {}, state = null) {
   const packingAmount = roundMoney(afterDiscount * cfg.order_packing_percentage / 100);
   const afterPacking = roundMoney(afterDiscount + packingAmount);
 
-  const gstApplicable = billType === 'with_gst' && isGstApplicable(state, cfg);
+  const gstApplicable = isGstApplicableForBillType(state, cfg, billType, settings);
   const taxableAmount = gstApplicable ? afterPacking : 0;
   const gstAmount = gstApplicable ? calculateGst(afterPacking, cfg.gst_percentage) : 0;
   const netAmount = roundMoney(afterPacking + gstAmount);

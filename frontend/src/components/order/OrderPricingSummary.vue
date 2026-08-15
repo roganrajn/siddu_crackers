@@ -18,7 +18,7 @@
         <span>Packing ({{ formatPct(breakdown.packing_percentage) }})</span>
         <span>{{ formatPrice(breakdown.packing_amount) }}</span>
       </div>
-      <div class="pricing-summary__row">
+      <div v-if="showGst" class="pricing-summary__row">
         <span v-if="breakdown.gst_applicable">GST ({{ formatPct(breakdown.gst_percentage) }})</span>
         <span v-else>GST</span>
         <span v-if="breakdown.gst_applicable">
@@ -26,6 +26,12 @@
         </span>
         <span v-else class="pricing-summary__not-applicable">
           Not Applicable
+        </span>
+      </div>
+      <div v-if="showGstStatus && gstStatusLabel" class="pricing-summary__row pricing-summary__row--gst-status">
+        <span>GST Status</span>
+        <span :class="breakdown.gst_applicable ? 'pricing-summary__gst-yes' : 'pricing-summary__not-applicable'">
+          {{ gstStatusLabel }}
         </span>
       </div>
       <div class="pricing-summary__row pricing-summary__row--net">
@@ -37,13 +43,19 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { formatPrice } from '@/utils/helpers';
+import { getGstStatusLabel } from '@/utils/orderPricing';
 
-defineProps({
+const props = defineProps({
   breakdown: { type: Object, required: true },
   variant: { type: String, default: 'table' },
   showTitle: { type: Boolean, default: true },
+  showGst: { type: Boolean, default: true },
+  showGstStatus: { type: Boolean, default: false },
 });
+
+const gstStatusLabel = computed(() => getGstStatusLabel(props.breakdown));
 
 function formatPct(value) {
   const num = parseFloat(value);
@@ -86,6 +98,19 @@ function formatPct(value) {
 .pricing-summary__not-applicable {
   color: #6B5A62;
   font-size: 0.85rem;
+}
+
+.pricing-summary__gst-yes {
+  color: $primary;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.pricing-summary__row--gst-status {
+  background: rgba(125, 60, 94, 0.06);
+  margin: 0 -12px;
+  padding: 8px 12px;
+  border-radius: $radius-sm;
 }
 
 .pricing-summary__row--net {

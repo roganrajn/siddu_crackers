@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { calculateOrderBreakdown } from '@/utils/orderPricing';
+import { calculateCartBreakdown } from '@/utils/orderPricing';
 
 const CART_KEY = 'siddu_cart';
 
@@ -40,7 +40,7 @@ export const useCartStore = defineStore('cart', () => {
 
   const pricing = computed(() => {
     const settingsStore = useSettingsStore();
-    return calculateOrderBreakdown(items.value, settingsStore.settings);
+    return calculateCartBreakdown(items.value, settingsStore.settings);
   });
 
   const total = computed(() => pricing.value.net_amount);

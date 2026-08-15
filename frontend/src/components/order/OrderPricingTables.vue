@@ -32,6 +32,8 @@
       v-if="breakdown"
       :breakdown="breakdown"
       variant="table"
+      :show-gst="showGst"
+      :show-gst-status="showGstStatus"
     />
 
     <div v-else-if="fallbackTotal != null" class="order-pricing__legacy-total">
@@ -54,6 +56,8 @@ defineProps({
   items: { type: Array, default: () => [] },
   breakdown: { type: Object, default: null },
   fallbackTotal: { type: Number, default: null },
+  showGst: { type: Boolean, default: true },
+  showGstStatus: { type: Boolean, default: false },
 });
 
 function itemKey(item, index) {
