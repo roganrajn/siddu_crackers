@@ -9,6 +9,7 @@ import {
   normalizeStatus,
 } from '../services/order.service.js';
 import { buildOrderDateFilter } from '../utils/dateFilter.js';
+import { calculateGst, roundMoney, normalizeBoolean } from '../utils/orderPricing.js';
 
 const router = express.Router();
 
@@ -190,7 +191,61 @@ router.put('/:id/payment', authMiddleware, async (req, res) => {
 
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
-    const order = await updateOrderStatus(req.params.id, req.body);
+    const body = req.body || {};
+    const hasGst = Object.prototype.hasOwnProperty.call(body, 'gst_applicable')
+      && body.gst_applicable !== null
+      && body.gst_applicable !== '';
+
+    if (hasGst) {
+      const id = parseInt(req.params.id, 10);
+      const gstFlag = normalizeBoolean(body.gst_applicable, false);
+      const existing = await pool.query('SELECT * FROM orders WHERE id = $1', [id]);
+      if (!existing.rows[0]) return res.status(404).json({ error: 'Order not found' });
+
+      const order = existing.rows[0];
+      const afterPacking = roundMoney(
+        parseFloat(order.after_discount || 0) + parseFloat(order.packing_amount || 0)
+      );
+      const settings = await pool.query(
+        'SELECT gst_percentage, gst_number FROM website_settings ORDER BY id LIMIT 1'
+      );
+      const gstPercentage = gstFlag ? parseFloat(settings.rows[0]?.gst_percentage || 18) : 0;
+      const gstAmount = gstFlag ? calculateGst(afterPacking, gstPercentage) : 0;
+      const netAmount = roundMoney(afterPacking + gstAmount);
+
+      const result = await pool.query(
+        `UPDATE orders SET
+          gst_applicable = $1,
+          gst_percentage = $2,
+          gst_amount = $3,
+          gst_number = $4,
+          taxable_amount = $5,
+          net_amount = $6,
+          total_amount = $6,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $7
+         RETURNING *`,
+        [
+          gstFlag,
+          gstPercentage,
+          gstAmount,
+          gstFlag ? (settings.rows[0]?.gst_number || order.gst_number) : order.gst_number,
+          gstFlag ? afterPacking : 0,
+          netAmount,
+          id,
+        ]
+      );
+
+      await pool.query(
+        'INSERT INTO order_logs (order_id, status, note) VALUES ($1, $2, $3)',
+        [id, order.status || 'new', `GST ${gstFlag ? 'enabled' : 'disabled'}, net ₹${netAmount}`]
+      );
+
+      return res.json(result.rows[0]);
+    }
+
+    if (!body.status) return res.status(400).json({ error: 'status is required' });
+    const order = await updateOrderStatus(req.params.id, body.status, body.note);
     res.json(order);
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
