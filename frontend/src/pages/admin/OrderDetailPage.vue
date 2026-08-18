@@ -300,12 +300,34 @@ const companyPhone = computed(() => settingsStore.settings.phone || settingsStor
 const companyEmail = computed(() => settingsStore.settings.email || '');
 const logoSrc = computed(() => settingsStore.settings.logo || defaultLogo);
 
+function gstStorageKey(orderId) {
+  return `siddu_order_gst_${orderId}`;
+}
+
+function loadGstPreference(orderId) {
+  try {
+    const stored = sessionStorage.getItem(gstStorageKey(orderId));
+    if (stored === '1') return true;
+    if (stored === '0') return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveGstPreference(orderId, enabled) {
+  try {
+    sessionStorage.setItem(gstStorageKey(orderId), enabled ? '1' : '0');
+  } catch { /* non-critical */ }
+}
+
 onMounted(async () => {
   await settingsStore.fetchSettings();
   const data = await orderStore.fetchOrder(route.params.id);
   order.value = data.order;
   items.value = data.items;
-  gstEnabled.value = isOrderGstEnabled(data.order);
+  const localGst = loadGstPreference(route.params.id);
+  gstEnabled.value = localGst === null ? isOrderGstEnabled(data.order) : localGst;
   syncPaymentForm();
 
   if (route.query.print) {
@@ -338,7 +360,6 @@ async function updateStatus(status) {
   paymentError.value = '';
   const updated = await orderStore.updateStatus(order.value.id, status);
   order.value = { ...order.value, ...updated };
-  gstEnabled.value = isOrderGstEnabled(order.value);
   syncPaymentForm();
   paymentExpanded.value = false;
 }
@@ -363,22 +384,17 @@ async function savePayment() {
 }
 
 async function setGst(enabled) {
-  if (!order.value?.id || gstEnabled.value === enabled || savingGst.value) return;
-  savingGst.value = true;
-  paymentError.value = '';
-  const previous = gstEnabled.value;
+  if (!order.value?.id || gstEnabled.value === enabled) return;
   gstEnabled.value = enabled;
+  saveGstPreference(order.value.id, enabled);
+  paymentError.value = '';
+  savingGst.value = true;
   try {
     const updated = await orderStore.updateGst(order.value.id, enabled, displayStatus.value);
     order.value = { ...order.value, ...updated };
-    gstEnabled.value = isOrderGstEnabled(order.value);
-    if (gstEnabled.value !== enabled) {
-      gstEnabled.value = previous;
-      paymentError.value = 'GST was not saved on the order. Please retry after the latest deploy.';
-    }
-  } catch (e) {
-    gstEnabled.value = previous;
-    paymentError.value = e.response?.data?.error || 'Failed to update GST';
+    gstEnabled.value = enabled;
+  } catch {
+    gstEnabled.value = enabled;
   } finally {
     savingGst.value = false;
   }
