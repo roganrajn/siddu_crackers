@@ -225,6 +225,7 @@ const savingPayment = ref(false);
 const paymentError = ref('');
 const paymentExpanded = ref(false);
 const savingGst = ref(false);
+const gstEnabled = ref(false);
 
 const PAYMENT_ENTRY_METHODS = PAYMENT_METHODS.filter((m) => m.value !== 'not_received');
 
@@ -271,9 +272,13 @@ const formattedDate = computed(() =>
     : ''
 );
 
-const gstEnabled = computed(() => isOrderGstEnabled(order.value));
-
-const gstRatePct = computed(() => getOrderGstRate(order.value, settingsStore.settings));
+const gstRatePct = computed(() => {
+  if (gstEnabled.value) {
+    const stored = parseFloat(order.value?.gst_rate ?? order.value?.gst_percentage ?? 0);
+    if (!Number.isNaN(stored) && stored > 0) return stored;
+  }
+  return getOrderGstRate({ gst_enabled: false }, settingsStore.settings);
+});
 
 const orderBreakdown = computed(() => {
   if (!order.value) return null;
@@ -300,6 +305,7 @@ onMounted(async () => {
   const data = await orderStore.fetchOrder(route.params.id);
   order.value = data.order;
   items.value = data.items;
+  gstEnabled.value = isOrderGstEnabled(data.order);
   syncPaymentForm();
 
   if (route.query.print) {
@@ -332,6 +338,7 @@ async function updateStatus(status) {
   paymentError.value = '';
   const updated = await orderStore.updateStatus(order.value.id, status);
   order.value = { ...order.value, ...updated };
+  gstEnabled.value = isOrderGstEnabled(order.value);
   syncPaymentForm();
   paymentExpanded.value = false;
 }
@@ -355,17 +362,51 @@ async function savePayment() {
   }
 }
 
+function applyGstSnapshot(orderObj, enabled) {
+  const base = getStoredOrderBreakdown(orderObj);
+  if (!base) {
+    return {
+      ...orderObj,
+      gst_enabled: enabled,
+      gst_applicable: enabled,
+      bill_type: enabled ? 'with_gst' : 'without_gst',
+    };
+  }
+  const rate = getOrderGstRate({ gst_enabled: false }, settingsStore.settings);
+  const priced = applyGstToBreakdown(base, enabled, enabled ? rate : 0);
+  return {
+    ...orderObj,
+    gst_enabled: enabled,
+    gst_applicable: enabled,
+    bill_type: enabled ? 'with_gst' : 'without_gst',
+    gst_rate: priced.gst_rate,
+    gst_percentage: priced.gst_rate,
+    gst_amount: priced.gst_amount,
+    taxable_amount: priced.amount_before_gst,
+    net_amount: priced.net_amount,
+    total_amount: priced.net_amount,
+  };
+}
+
 async function setGst(enabled) {
   if (!order.value?.id || gstEnabled.value === enabled || savingGst.value) return;
   savingGst.value = true;
+  gstEnabled.value = enabled;
   try {
     const updated = await orderStore.updateStatus(order.value.id, displayStatus.value, {
       gst_enabled: enabled,
       gst_applicable: enabled,
       bill_type: enabled ? 'with_gst' : 'without_gst',
     });
-    order.value = { ...order.value, ...updated };
+    const merged = { ...order.value, ...updated };
+    if (isOrderGstEnabled(merged) === enabled && (!enabled || parseFloat(merged.gst_amount) > 0)) {
+      order.value = merged;
+    } else {
+      order.value = applyGstSnapshot(merged, enabled);
+    }
+    gstEnabled.value = enabled;
   } catch (e) {
+    gstEnabled.value = !enabled;
     paymentError.value = e.response?.data?.error || 'Failed to update GST';
   } finally {
     savingGst.value = false;

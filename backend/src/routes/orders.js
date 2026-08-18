@@ -197,9 +197,7 @@ router.put('/:id/payment', authMiddleware, async (req, res) => {
 
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
-    const { status, note, gst_enabled, gst_applicable } = req.body;
-    const gstFlag = gst_enabled ?? gst_applicable;
-    const order = await updateOrderStatus(req.params.id, status, note, { gst_enabled: gstFlag });
+    const order = await updateOrderStatus(req.params.id, req.body);
     res.json(order);
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
