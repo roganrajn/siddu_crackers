@@ -369,7 +369,7 @@ async function setGst(enabled) {
   const previous = gstEnabled.value;
   gstEnabled.value = enabled;
   try {
-    const updated = await orderStore.updateGst(order.value.id, enabled);
+    const updated = await orderStore.updateGst(order.value.id, enabled, displayStatus.value);
     order.value = { ...order.value, ...updated };
     gstEnabled.value = isOrderGstEnabled(order.value);
     if (gstEnabled.value !== enabled) {

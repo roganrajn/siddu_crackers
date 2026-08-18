@@ -222,8 +222,7 @@ router.put('/:id/gst', authMiddleware, async (req, res) => {
 
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
-    const { status, note } = req.body;
-    const order = await updateOrderStatus(req.params.id, status, note);
+    const order = await updateOrderStatus(req.params.id, req.body);
     res.json(order);
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });

@@ -314,11 +314,13 @@ export async function updateOrderStatus(orderId, status, note = null) {
     throw err;
   }
 
+  const gstFlag = parseOptionalBoolean(body.gst_enabled);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const existing = await client.query('SELECT status FROM orders WHERE id = $1', [id]);
+    const existing = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
     if (!existing.rows[0]) {
       await client.query('ROLLBACK');
       const err = new Error('Order not found');
@@ -326,21 +328,59 @@ export async function updateOrderStatus(orderId, status, note = null) {
       throw err;
     }
 
-    const prevStatus = normalizeStatus(existing.rows[0].status);
+    const current = existing.rows[0];
+    const prevStatus = normalizeStatus(current.status);
     const clearPayment = normalized === 'confirmed' && prevStatus !== 'confirmed';
 
-    const result = await client.query(
+    await client.query(
       `UPDATE orders SET
         status = $1::varchar,
         payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END,
         payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END,
         payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END,
         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3 RETURNING *`,
+       WHERE id = $3`,
       [normalized, clearPayment, id]
     );
 
-    await logOrderStatus(client, id, normalized, body.note || `Status changed to ${normalized}`);
+    if (gstFlag !== undefined) {
+      let gstPct = 18;
+      try {
+        gstPct = resolveGstRate(await getOrderSettings(client));
+      } catch {
+        gstPct = 18;
+      }
+      const priced = applyGstToBreakdown(
+        {
+          after_discount: current.after_discount,
+          packing_amount: current.packing_amount,
+        },
+        gstFlag,
+        gstFlag ? gstPct : 0
+      );
+      await client.query(
+        `UPDATE orders SET
+          gst_enabled = $1,
+          gst_percentage = $2,
+          gst_amount = $3,
+          net_amount = $4,
+          total_amount = $4,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [gstFlag, priced.gst_rate, priced.gst_amount, priced.net_amount, id]
+      );
+    }
+
+    await logOrderStatus(
+      client,
+      id,
+      normalized,
+      body.note || (gstFlag !== undefined
+        ? (gstFlag ? 'GST enabled' : 'GST disabled')
+        : `Status changed to ${normalized}`)
+    );
+
+    const result = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
     await client.query('COMMIT');
     return result.rows[0];
   } catch (error) {
