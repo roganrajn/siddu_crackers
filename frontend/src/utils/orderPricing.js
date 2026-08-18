@@ -14,7 +14,9 @@ export function normalizeOrderSettings(settings = {}) {
   return {
     min_order_amount: parseFloat(settings.min_order_amount ?? DEFAULT_ORDER_SETTINGS.min_order_amount),
     order_packing_percentage: parseFloat(settings.order_packing_percentage ?? DEFAULT_ORDER_SETTINGS.order_packing_percentage),
-    order_gst_percentage: parseFloat(settings.order_gst_percentage ?? DEFAULT_ORDER_SETTINGS.order_gst_percentage),
+    order_gst_percentage: parseFloat(
+      settings.order_gst_percentage ?? settings.gst_percentage ?? DEFAULT_ORDER_SETTINGS.order_gst_percentage
+    ),
   };
 }
 
@@ -75,6 +77,24 @@ export function calculateOrderBreakdown(items, settings = {}) {
     net_amount: netAmount,
     min_order_amount: cfg.min_order_amount,
   };
+}
+
+export function isOrderGstEnabled(order) {
+  if (!order) return false;
+  const flag = order.gst_enabled ?? order.gst_applicable;
+  if (flag === true || flag === 't' || flag === 'true' || flag === 1 || flag === '1') return true;
+  if (flag === false || flag === 'f' || flag === 'false' || flag === 0 || flag === '0') return false;
+  return parseFloat(order.gst_amount) > 0 || order.bill_type === 'with_gst';
+}
+
+export function getOrderGstRate(order, settings = {}) {
+  if (isOrderGstEnabled(order)) {
+    const stored = parseFloat(order.gst_rate ?? order.gst_percentage ?? 0);
+    if (!Number.isNaN(stored) && stored > 0) return stored;
+  }
+  return parseFloat(
+    settings.order_gst_percentage ?? settings.gst_percentage ?? DEFAULT_GST_RATE
+  );
 }
 
 export function applyGstToBreakdown(breakdown, gstEnabled, gstRate = DEFAULT_GST_RATE) {

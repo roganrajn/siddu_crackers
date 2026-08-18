@@ -212,7 +212,7 @@ import { useOrderStore } from '@/stores/orderStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getPaymentStatusLabel, getPaymentMethodDetail } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
-import { DEFAULT_GST_RATE, getStoredOrderBreakdown, applyGstToBreakdown } from '@/utils/orderPricing';
+import { getStoredOrderBreakdown, applyGstToBreakdown, isOrderGstEnabled, getOrderGstRate } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 import defaultLogo from '@/assets/logo.png';
 
@@ -271,14 +271,9 @@ const formattedDate = computed(() =>
     : ''
 );
 
-const gstEnabled = computed(() => Boolean(order.value?.gst_enabled));
+const gstEnabled = computed(() => isOrderGstEnabled(order.value));
 
-const gstRatePct = computed(() => {
-  if (gstEnabled.value && order.value?.gst_rate != null && order.value.gst_rate !== '') {
-    return parseFloat(order.value.gst_rate);
-  }
-  return parseFloat(settingsStore.settings.order_gst_percentage ?? DEFAULT_GST_RATE);
-});
+const gstRatePct = computed(() => getOrderGstRate(order.value, settingsStore.settings));
 
 const orderBreakdown = computed(() => {
   if (!order.value) return null;
@@ -366,6 +361,8 @@ async function setGst(enabled) {
   try {
     const updated = await orderStore.updateStatus(order.value.id, displayStatus.value, {
       gst_enabled: enabled,
+      gst_applicable: enabled,
+      bill_type: enabled ? 'with_gst' : 'without_gst',
     });
     order.value = { ...order.value, ...updated };
   } catch (e) {

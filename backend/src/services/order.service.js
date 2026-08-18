@@ -119,10 +119,34 @@ async function createNotification(type, title, message, referenceId) {
 
 async function getOrderSettings(client) {
   const result = await client.query(
-    `SELECT min_order_amount, order_packing_percentage, order_gst_percentage
-     FROM website_settings ORDER BY id LIMIT 1`
+    'SELECT * FROM website_settings ORDER BY id LIMIT 1'
   );
   return normalizeOrderSettings(result.rows[0] || {});
+}
+
+async function getTableColumns(client, tableName) {
+  const result = await client.query(
+    `SELECT column_name, is_generated
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName]
+  );
+  return new Set(
+    result.rows
+      .filter((row) => row.is_generated !== 'ALWAYS')
+      .map((row) => row.column_name)
+  );
+}
+
+function isTruthyFlag(value) {
+  return value === true || value === 't' || value === 'true' || value === 1 || value === '1';
+}
+
+function isOrderGstOn(order) {
+  if (!order) return false;
+  if (order.gst_enabled != null) return isTruthyFlag(order.gst_enabled);
+  if (order.gst_applicable != null) return isTruthyFlag(order.gst_applicable);
+  return parseFloat(order.gst_amount) > 0 || order.bill_type === 'with_gst';
 }
 
 async function resolveOrderItems(client, items) {
@@ -327,42 +351,69 @@ export async function updateOrderStatus(orderId, status, note = null, extras = {
     const statusChanged = nextStatus !== prevStatus;
     const gstTouched = gstFlag !== undefined;
     const clearPayment = statusChanged && nextStatus === 'confirmed';
+    const columns = await getTableColumns(client, 'orders');
 
-    let gstEnabled = Boolean(current.gst_enabled);
-    let gstRate = parseFloat(current.gst_rate ?? 0);
-    let gstAmount = parseFloat(current.gst_amount ?? 0);
-    let netAmount = parseFloat(current.net_amount ?? current.total_amount ?? 0);
+    let gstEnabled = isOrderGstOn(current);
+    let gstRate = parseFloat(current.gst_rate ?? current.gst_percentage ?? 0) || 0;
+    let gstAmount = parseFloat(current.gst_amount ?? 0) || 0;
+    let taxableAmount = parseFloat(current.taxable_amount ?? current.after_discount ?? 0) || 0;
+    let netAmount = parseFloat(current.net_amount ?? current.total_amount ?? 0) || 0;
+
+    const setClauses = [
+      'status = $1::varchar',
+      `payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END`,
+      `payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END`,
+      `payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END`,
+      'updated_at = CURRENT_TIMESTAMP',
+    ];
+    const params = [nextStatus, clearPayment];
+
+    function addSet(column, value) {
+      if (!columns.has(column)) return;
+      params.push(value);
+      const idx = params.length;
+      const cast = typeof value === 'boolean' ? '::boolean' : '';
+      setClauses.splice(setClauses.length - 1, 0, `${column} = $${idx}${cast}`);
+    }
 
     if (gstTouched) {
       gstEnabled = gstFlag;
-      const orderSettings = await getOrderSettings(client);
+      let gstPct = 18;
+      try {
+        const orderSettings = await getOrderSettings(client);
+        gstPct = orderSettings.order_gst_percentage;
+      } catch {
+        gstPct = 18;
+      }
       const priced = applyGstToBreakdown(
         {
           after_discount: current.after_discount,
           packing_amount: current.packing_amount,
         },
         gstEnabled,
-        gstEnabled ? orderSettings.order_gst_percentage : 0
+        gstEnabled ? gstPct : 0
       );
       gstRate = priced.gst_rate;
       gstAmount = priced.gst_amount;
+      taxableAmount = priced.amount_before_gst;
       netAmount = priced.net_amount;
+
+      addSet('gst_enabled', gstEnabled);
+      addSet('gst_applicable', gstEnabled);
+      addSet('gst_rate', gstRate);
+      addSet('gst_percentage', gstRate);
+      addSet('gst_amount', gstAmount);
+      addSet('taxable_amount', gstEnabled ? taxableAmount : 0);
+      addSet('bill_type', gstEnabled ? 'with_gst' : 'without_gst');
+      addSet('net_amount', netAmount);
+      addSet('total_amount', netAmount);
     }
 
+    params.push(id);
+
     const result = await client.query(
-      `UPDATE orders SET
-        status = $1::varchar,
-        payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END,
-        payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END,
-        payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END,
-        gst_enabled = $3,
-        gst_rate = $4,
-        gst_amount = $5,
-        net_amount = $6,
-        total_amount = $6,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $7 RETURNING *`,
-      [nextStatus, clearPayment, gstEnabled, gstRate, gstAmount, netAmount, id]
+      `UPDATE orders SET ${setClauses.join(', ')} WHERE id = $${params.length} RETURNING *`,
+      params
     );
 
     let logNote = note;

@@ -12,7 +12,9 @@ export function normalizeOrderSettings(settings = {}) {
   return {
     min_order_amount: parseFloat(settings.min_order_amount ?? DEFAULT_ORDER_SETTINGS.min_order_amount),
     order_packing_percentage: parseFloat(settings.order_packing_percentage ?? DEFAULT_ORDER_SETTINGS.order_packing_percentage),
-    order_gst_percentage: parseFloat(settings.order_gst_percentage ?? DEFAULT_ORDER_SETTINGS.order_gst_percentage),
+    order_gst_percentage: parseFloat(
+      settings.order_gst_percentage ?? settings.gst_percentage ?? DEFAULT_ORDER_SETTINGS.order_gst_percentage
+    ),
   };
 }
 
