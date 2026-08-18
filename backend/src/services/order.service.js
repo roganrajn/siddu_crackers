@@ -131,16 +131,6 @@ function resolveGstRate(settings = {}) {
   return !rate || Number.isNaN(rate) ? 18 : rate;
 }
 
-function parseGstFlag(body = {}) {
-  const fromEnabled = parseOptionalBoolean(body.gst_enabled);
-  if (fromEnabled !== undefined) return fromEnabled;
-  const fromApplicable = parseOptionalBoolean(body.gst_applicable);
-  if (fromApplicable !== undefined) return fromApplicable;
-  if (body.bill_type === 'with_gst') return true;
-  if (body.bill_type === 'without_gst') return false;
-  return undefined;
-}
-
 async function resolveOrderItems(client, items) {
   const resolved = [];
 
@@ -308,10 +298,14 @@ function parseOptionalBoolean(value) {
   return Boolean(value);
 }
 
-export async function updateOrderStatus(orderId, statusOrBody, note = null, extras = {}) {
-  const body = typeof statusOrBody === 'object' && statusOrBody !== null
-    ? statusOrBody
-    : { status: statusOrBody, note, ...extras };
+export async function updateOrderStatus(orderId, status, note = null) {
+  const body = typeof status === 'object' && status !== null ? status : { status, note };
+  const normalized = normalizeStatus(body.status);
+  if (!VALID_STATUSES.includes(normalized)) {
+    const err = new Error('Invalid status');
+    err.status = 400;
+    throw err;
+  }
 
   const id = parseInt(orderId, 10);
   if (!id) {
@@ -320,7 +314,61 @@ export async function updateOrderStatus(orderId, statusOrBody, note = null, extr
     throw err;
   }
 
-  const gstFlag = parseGstFlag(body);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query('SELECT status FROM orders WHERE id = $1', [id]);
+    if (!existing.rows[0]) {
+      await client.query('ROLLBACK');
+      const err = new Error('Order not found');
+      err.status = 404;
+      throw err;
+    }
+
+    const prevStatus = normalizeStatus(existing.rows[0].status);
+    const clearPayment = normalized === 'confirmed' && prevStatus !== 'confirmed';
+
+    const result = await client.query(
+      `UPDATE orders SET
+        status = $1::varchar,
+        payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END,
+        payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END,
+        payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3 RETURNING *`,
+      [normalized, clearPayment, id]
+    );
+
+    await logOrderStatus(client, id, normalized, body.note || `Status changed to ${normalized}`);
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore rollback errors
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateOrderGst(orderId, gstEnabled) {
+  const id = parseInt(orderId, 10);
+  if (!id) {
+    const err = new Error('Invalid order id');
+    err.status = 400;
+    throw err;
+  }
+
+  const enabled = parseOptionalBoolean(gstEnabled);
+  if (enabled === undefined) {
+    const err = new Error('gst_enabled is required');
+    err.status = 400;
+    throw err;
+  }
 
   const client = await pool.connect();
   try {
@@ -335,116 +383,41 @@ export async function updateOrderStatus(orderId, statusOrBody, note = null, extr
     }
 
     const current = existing.rows[0];
-    const prevStatus = normalizeStatus(current.status);
-    const nextStatus = body.status != null && body.status !== ''
-      ? normalizeStatus(body.status)
-      : prevStatus;
-
-    if (!VALID_STATUSES.includes(nextStatus)) {
-      const err = new Error('Invalid status');
-      err.status = 400;
-      throw err;
-    }
-
-    const statusChanged = nextStatus !== prevStatus;
-    const gstTouched = gstFlag !== undefined;
-    const clearPayment = statusChanged && nextStatus === 'confirmed';
-
-    let gstEnabled = gstTouched ? gstFlag : Boolean(current.gst_enabled || current.gst_applicable);
-    let gstRate = parseFloat(current.gst_rate ?? current.gst_percentage ?? 0) || 0;
-    let gstAmount = parseFloat(current.gst_amount ?? 0) || 0;
-    let taxableAmount = parseFloat(current.taxable_amount ?? current.after_discount ?? 0) || 0;
-    let netAmount = parseFloat(current.net_amount ?? current.total_amount ?? 0) || 0;
-
-    if (gstTouched) {
-      let gstPct = 18;
-      try {
-        gstPct = resolveGstRate(await getOrderSettings(client));
-      } catch {
-        gstPct = 18;
-      }
-      const priced = applyGstToBreakdown(
-        {
-          after_discount: current.after_discount,
-          packing_amount: current.packing_amount,
-        },
-        gstEnabled,
-        gstEnabled ? gstPct : 0
-      );
-      gstRate = priced.gst_rate;
-      gstAmount = priced.gst_amount;
-      taxableAmount = priced.amount_before_gst;
-      netAmount = priced.net_amount;
-    }
-
-    let result;
-    const gstParams = [
-      nextStatus,
-      clearPayment,
-      gstTouched,
-      gstEnabled,
-      gstRate,
-      gstAmount,
-      gstEnabled ? taxableAmount : 0,
-      gstEnabled ? 'with_gst' : 'without_gst',
-      netAmount,
-      id,
-    ];
-    await client.query('SAVEPOINT gst_update');
+    let gstPct = 18;
     try {
-      result = await client.query(
-        `UPDATE orders SET
-          status = $1::varchar,
-          payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END,
-          payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END,
-          payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END,
-          gst_enabled = CASE WHEN $3::boolean THEN $4::boolean ELSE gst_enabled END,
-          gst_applicable = CASE WHEN $3::boolean THEN $4::boolean ELSE gst_applicable END,
-          gst_rate = CASE WHEN $3::boolean THEN $5::numeric ELSE gst_rate END,
-          gst_percentage = CASE WHEN $3::boolean THEN $5::numeric ELSE gst_percentage END,
-          gst_amount = CASE WHEN $3::boolean THEN $6::numeric ELSE gst_amount END,
-          taxable_amount = CASE WHEN $3::boolean THEN $7::numeric ELSE taxable_amount END,
-          bill_type = CASE WHEN $3::boolean THEN $8::varchar ELSE bill_type END,
-          net_amount = CASE WHEN $3::boolean THEN $9::numeric ELSE net_amount END,
-          total_amount = CASE WHEN $3::boolean THEN $9::numeric ELSE total_amount END,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE id = $10
-         RETURNING *`,
-        gstParams
-      );
-    } catch (updateError) {
-      await client.query('ROLLBACK TO SAVEPOINT gst_update');
-      const generatedCol = updateError.code === '428C9' || String(updateError.message).includes('generated');
-      if (!generatedCol) throw updateError;
-      result = await client.query(
-        `UPDATE orders SET
-          status = $1::varchar,
-          payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END,
-          payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END,
-          payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END,
-          gst_applicable = CASE WHEN $3::boolean THEN $4::boolean ELSE gst_applicable END,
-          gst_percentage = CASE WHEN $3::boolean THEN $5::numeric ELSE gst_percentage END,
-          gst_amount = CASE WHEN $3::boolean THEN $6::numeric ELSE gst_amount END,
-          taxable_amount = CASE WHEN $3::boolean THEN $7::numeric ELSE taxable_amount END,
-          bill_type = CASE WHEN $3::boolean THEN $8::varchar ELSE bill_type END,
-          net_amount = CASE WHEN $3::boolean THEN $9::numeric ELSE net_amount END,
-          total_amount = CASE WHEN $3::boolean THEN $9::numeric ELSE total_amount END,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE id = $10
-         RETURNING *`,
-        gstParams
-      );
+      gstPct = resolveGstRate(await getOrderSettings(client));
+    } catch {
+      gstPct = 18;
     }
 
-    const logNote = body.note || note || (
-      statusChanged
-        ? `Status changed to ${nextStatus}`
-        : (gstTouched ? (gstEnabled ? 'GST enabled' : 'GST disabled') : null)
+    const priced = applyGstToBreakdown(
+      {
+        after_discount: current.after_discount,
+        packing_amount: current.packing_amount,
+      },
+      enabled,
+      enabled ? gstPct : 0
     );
 
-    if (statusChanged || gstTouched) {
-      await logOrderStatus(client, id, nextStatus, logNote);
-    }
+    const result = await client.query(
+      `UPDATE orders SET
+        gst_enabled = $1,
+        gst_percentage = $2,
+        gst_amount = $3,
+        net_amount = $4,
+        total_amount = $4,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5
+       RETURNING *`,
+      [enabled, priced.gst_rate, priced.gst_amount, priced.net_amount, id]
+    );
+
+    await logOrderStatus(
+      client,
+      id,
+      normalizeStatus(current.status),
+      enabled ? `GST enabled at ${priced.gst_rate}%` : 'GST disabled'
+    );
 
     await client.query('COMMIT');
     return result.rows[0];

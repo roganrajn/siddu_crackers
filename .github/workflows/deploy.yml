@@ -42,12 +42,15 @@ jobs:
             npm run build
 
             echo "Installing Backend..."
-            cd ../backend
-
+            cd "$PROJECT_DIR/backend"
             npm install
 
+            echo "Verifying GST route in source..."
+            grep -n "router.put('/gst/:id'" src/routes/orders.js
+            grep -n "export async function updateOrderGst" src/services/order.service.js
+
             echo "Running database migrations..."
-            cd ..
+            cd "$PROJECT_DIR"
             if [ -f backend/.env ]; then
               DATABASE_URL=$(grep '^DATABASE_URL=' backend/.env | cut -d= -f2-)
               for migration in database/migration_v5.sql database/migration_v6.sql database/migration_v7.sql database/migration_v8.sql database/migration_v9.sql; do
@@ -59,9 +62,28 @@ jobs:
             fi
 
             echo "Restarting Backend..."
-            cd backend
+            cd "$PROJECT_DIR/backend"
+            pm2 delete siddu-backend || true
+            pm2 start npm --name siddu-backend --cwd "$PROJECT_DIR/backend" -- start
+            sleep 3
+            pm2 save
 
-            pm2 restart siddu-backend || pm2 start npm --name siddu-backend -- start
+            echo "Probing GST route..."
+            GST_PROBE_BODY=$(mktemp)
+            GST_PROBE_CODE=$(curl -s -o "$GST_PROBE_BODY" -w "%{http_code}" -X PUT http://127.0.0.1:3001/api/orders/gst/1 \
+              -H "Content-Type: application/json" \
+              -d '{"gst_enabled":true}' || true)
+            echo "GST probe HTTP $GST_PROBE_CODE"
+            cat "$GST_PROBE_BODY" || true
+            if grep -q "Cannot PUT" "$GST_PROBE_BODY"; then
+              echo "ERROR: GST route not registered after restart"
+              exit 1
+            fi
+            if [ "$GST_PROBE_CODE" = "404" ] && ! grep -q "Order not found" "$GST_PROBE_BODY"; then
+              echo "ERROR: GST endpoint returned 404"
+              exit 1
+            fi
+            rm -f "$GST_PROBE_BODY"
 
             echo "Updating Nginx upload limit..."
             NGINX_CONF="/etc/nginx/nginx.conf"

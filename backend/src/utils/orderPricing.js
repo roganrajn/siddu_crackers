@@ -85,6 +85,7 @@ export function applyGstToBreakdown(breakdown, gstEnabled, gstRate = DEFAULT_ORD
     ...breakdown,
     amount_before_gst: taxableAmount,
     gst_enabled: enabled,
+    gst_percentage: enabled ? rate : 0,
     gst_rate: enabled ? rate : 0,
     gst_amount: gstAmount,
     net_amount: netAmount,

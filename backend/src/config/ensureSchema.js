@@ -44,25 +44,36 @@ export async function ensureSchema() {
 
   await pool.query(`
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_enabled BOOLEAN DEFAULT false;
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_applicable BOOLEAN DEFAULT false;
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_rate DECIMAL(5, 2) DEFAULT 0;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5, 2) DEFAULT 0;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_amount DECIMAL(10, 2) DEFAULT 0;
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS taxable_amount DECIMAL(10, 2) DEFAULT 0;
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS bill_type VARCHAR(50) DEFAULT 'without_gst';
-    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_number VARCHAR(50);
   `);
 
   await pool.query(`
     UPDATE website_settings SET order_gst_percentage = 18 WHERE order_gst_percentage IS NULL;
-    UPDATE orders SET gst_enabled = COALESCE(gst_enabled, gst_applicable, false);
-    UPDATE orders SET gst_applicable = COALESCE(gst_applicable, gst_enabled, false);
-    UPDATE orders SET gst_rate = COALESCE(NULLIF(gst_rate, 0), gst_percentage, 0);
-    UPDATE orders SET gst_percentage = COALESCE(NULLIF(gst_percentage, 0), gst_rate, 0);
+    UPDATE orders SET gst_enabled = COALESCE(gst_enabled, false);
+    UPDATE orders SET gst_percentage = COALESCE(gst_percentage, 0);
     UPDATE orders SET gst_amount = COALESCE(gst_amount, 0);
-    UPDATE orders SET taxable_amount = COALESCE(taxable_amount, 0);
-    UPDATE orders SET bill_type = COALESCE(NULLIF(bill_type, ''), CASE WHEN COALESCE(gst_enabled, gst_applicable, false) THEN 'with_gst' ELSE 'without_gst' END);
   `);
+
+  try {
+    const triggers = await pool.query(`
+      SELECT t.tgname
+      FROM pg_trigger t
+      JOIN pg_class c ON c.oid = t.tgrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname = 'orders'
+        AND n.nspname = 'public'
+        AND NOT t.tgisinternal
+    `);
+    for (const row of triggers.rows) {
+      if (!/gst|bill_type|taxable/i.test(row.tgname)) continue;
+      const name = String(row.tgname).replace(/"/g, '');
+      await pool.query(`DROP TRIGGER IF EXISTS "${name}" ON orders`);
+      console.log(`[db] Dropped order trigger ${name}`);
+    }
+  } catch (error) {
+    console.error('[db] Could not inspect order triggers:', error.message);
+  }
 
   await pool.query(`
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal_mrp DECIMAL(10, 2);

@@ -68,8 +68,15 @@ export const useOrderStore = defineStore('order', () => {
     return data;
   }
 
-  async function updateStatus(id, status, extra = {}) {
-    const { data } = await api.put(`/orders/${id}/status`, { status, ...extra });
+  async function updateStatus(id, status) {
+    const { data } = await api.put(`/orders/${id}/status`, { status });
+    const idx = orders.value.findIndex((o) => o.id === id);
+    if (idx !== -1) orders.value[idx] = data;
+    return data;
+  }
+
+  async function updateGst(id, gstEnabled) {
+    const { data } = await api.put(`/orders/gst/${id}`, { gst_enabled: gstEnabled });
     const idx = orders.value.findIndex((o) => o.id === id);
     if (idx !== -1) orders.value[idx] = data;
     return data;
@@ -107,6 +114,7 @@ export const useOrderStore = defineStore('order', () => {
     pollNewOrders,
     fetchOrder,
     updateStatus,
+    updateGst,
     updatePayment,
     exportCSV,
   };

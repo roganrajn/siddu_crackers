@@ -80,21 +80,17 @@ export function calculateOrderBreakdown(items, settings = {}) {
 }
 
 export function isOrderGstEnabled(order) {
-  if (!order) return false;
-  const flag = order.gst_enabled ?? order.gst_applicable;
-  if (flag === true || flag === 't' || flag === 'true' || flag === 1 || flag === '1') return true;
-  if (flag === false || flag === 'f' || flag === 'false' || flag === 0 || flag === '0') return false;
-  return parseFloat(order.gst_amount) > 0 || order.bill_type === 'with_gst';
+  const flag = order?.gst_enabled;
+  return flag === true || flag === 't' || flag === 'true' || flag === 1 || flag === '1';
 }
 
 export function getOrderGstRate(order, settings = {}) {
   if (isOrderGstEnabled(order)) {
-    const stored = parseFloat(order.gst_rate ?? order.gst_percentage ?? 0);
+    const stored = parseFloat(order.gst_percentage ?? 0);
     if (!Number.isNaN(stored) && stored > 0) return stored;
   }
-  return parseFloat(
-    settings.order_gst_percentage ?? settings.gst_percentage ?? DEFAULT_GST_RATE
-  );
+  const fromSettings = parseFloat(settings.order_gst_percentage ?? DEFAULT_GST_RATE);
+  return !fromSettings || Number.isNaN(fromSettings) ? DEFAULT_GST_RATE : fromSettings;
 }
 
 export function applyGstToBreakdown(breakdown, gstEnabled, gstRate = DEFAULT_GST_RATE) {
@@ -109,6 +105,7 @@ export function applyGstToBreakdown(breakdown, gstEnabled, gstRate = DEFAULT_GST
     ...breakdown,
     amount_before_gst: taxableAmount,
     gst_enabled: enabled,
+    gst_percentage: enabled ? rate : 0,
     gst_rate: enabled ? rate : 0,
     gst_amount: gstAmount,
     net_amount: netAmount,

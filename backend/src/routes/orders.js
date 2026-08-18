@@ -5,6 +5,7 @@ import {
   createOrder,
   updateOrderStatus,
   updateOrderPayment,
+  updateOrderGst,
   CUSTOMER_STATUS_MAP,
   normalizeStatus,
 } from '../services/order.service.js';
@@ -144,6 +145,18 @@ router.get('/export/csv', authMiddleware, async (req, res) => {
   }
 });
 
+router.put('/gst/:id', authMiddleware, async (req, res) => {
+  try {
+    const order = await updateOrderGst(req.params.id, req.body?.gst_enabled);
+    res.json(order);
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    if (error.status === 404) return res.status(404).json({ error: error.message });
+    console.error('Update order GST error:', error.message, error.code || '');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
@@ -195,9 +208,22 @@ router.put('/:id/payment', authMiddleware, async (req, res) => {
   }
 });
 
+router.put('/:id/gst', authMiddleware, async (req, res) => {
+  try {
+    const order = await updateOrderGst(req.params.id, req.body?.gst_enabled);
+    res.json(order);
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    if (error.status === 404) return res.status(404).json({ error: error.message });
+    console.error('Update order GST error:', error.message, error.code || '');
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
-    const order = await updateOrderStatus(req.params.id, req.body);
+    const { status, note } = req.body;
+    const order = await updateOrderStatus(req.params.id, status, note);
     res.json(order);
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
