@@ -68,8 +68,8 @@ export const useOrderStore = defineStore('order', () => {
     return data;
   }
 
-  async function updateStatus(id, status) {
-    const { data } = await api.put(`/orders/${id}/status`, { status });
+  async function updateStatus(id, status, extra = {}) {
+    const { data } = await api.put(`/orders/${id}/status`, { status, ...extra });
     const idx = orders.value.findIndex((o) => o.id === id);
     if (idx !== -1) orders.value[idx] = data;
     return data;

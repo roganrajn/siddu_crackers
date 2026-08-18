@@ -57,7 +57,7 @@
           </select>
         </p>
         <p><strong>Net Amount:</strong> <span class="total">{{ formatPrice(orderBreakdown?.net_amount ?? order.net_amount ?? order.total_amount) }}</span></p>
-        <p class="print-only"><strong>Billing:</strong> {{ gstEnabled ? 'With GST (18%)' : 'Without GST' }}</p>
+        <p class="print-only"><strong>Billing:</strong> {{ gstEnabled ? `With GST (${formatPct(gstRatePct)})` : 'Without GST' }}</p>
 
         <div class="gst-panel no-print">
           <label class="gst-panel__label">Billing</label>
@@ -65,6 +65,7 @@
             <button
               type="button"
               :class="['gst-toggle__btn', { active: !gstEnabled }]"
+              :disabled="savingGst"
               @click="setGst(false)"
             >
               Without GST
@@ -72,9 +73,10 @@
             <button
               type="button"
               :class="['gst-toggle__btn', { active: gstEnabled }]"
+              :disabled="savingGst"
               @click="setGst(true)"
             >
-              With GST (18%)
+              With GST ({{ formatPct(gstRatePct) }})
             </button>
           </div>
         </div>
@@ -210,7 +212,7 @@ import { useOrderStore } from '@/stores/orderStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { ORDER_STATUSES, LEGACY_STATUS_MAP, PAYMENT_METHODS, getPaymentStatusLabel, getPaymentMethodDetail } from '@/constants';
 import { formatPrice } from '@/utils/helpers';
-import { getStoredOrderBreakdown, applyGstToBreakdown } from '@/utils/orderPricing';
+import { DEFAULT_GST_RATE, getStoredOrderBreakdown, applyGstToBreakdown } from '@/utils/orderPricing';
 import OrderPricingTables from '@/components/order/OrderPricingTables.vue';
 import defaultLogo from '@/assets/logo.png';
 
@@ -222,7 +224,7 @@ const items = ref([]);
 const savingPayment = ref(false);
 const paymentError = ref('');
 const paymentExpanded = ref(false);
-const gstEnabled = ref(false);
+const savingGst = ref(false);
 
 const PAYMENT_ENTRY_METHODS = PAYMENT_METHODS.filter((m) => m.value !== 'not_received');
 
@@ -269,11 +271,20 @@ const formattedDate = computed(() =>
     : ''
 );
 
+const gstEnabled = computed(() => Boolean(order.value?.gst_enabled));
+
+const gstRatePct = computed(() => {
+  if (gstEnabled.value && order.value?.gst_rate != null && order.value.gst_rate !== '') {
+    return parseFloat(order.value.gst_rate);
+  }
+  return parseFloat(settingsStore.settings.order_gst_percentage ?? DEFAULT_GST_RATE);
+});
+
 const orderBreakdown = computed(() => {
   if (!order.value) return null;
   const base = getStoredOrderBreakdown(order.value);
   if (!base) return null;
-  return applyGstToBreakdown(base, gstEnabled.value);
+  return applyGstToBreakdown(base, gstEnabled.value, gstRatePct.value);
 });
 
 function formatPct(value) {
@@ -289,30 +300,11 @@ const companyPhone = computed(() => settingsStore.settings.phone || settingsStor
 const companyEmail = computed(() => settingsStore.settings.email || '');
 const logoSrc = computed(() => settingsStore.settings.logo || defaultLogo);
 
-function gstStorageKey(orderId) {
-  return `siddu_order_gst_${orderId}`;
-}
-
-function loadGstPreference(orderId) {
-  try {
-    return sessionStorage.getItem(gstStorageKey(orderId)) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function saveGstPreference(orderId, enabled) {
-  try {
-    sessionStorage.setItem(gstStorageKey(orderId), enabled ? '1' : '0');
-  } catch { /* non-critical */ }
-}
-
 onMounted(async () => {
   await settingsStore.fetchSettings();
   const data = await orderStore.fetchOrder(route.params.id);
   order.value = data.order;
   items.value = data.items;
-  gstEnabled.value = route.query.gst === '1' || loadGstPreference(route.params.id);
   syncPaymentForm();
 
   if (route.query.print) {
@@ -369,10 +361,17 @@ async function savePayment() {
 }
 
 async function setGst(enabled) {
-  if (gstEnabled.value === enabled) return;
-  gstEnabled.value = enabled;
-  if (order.value?.id) {
-    saveGstPreference(order.value.id, enabled);
+  if (!order.value?.id || gstEnabled.value === enabled || savingGst.value) return;
+  savingGst.value = true;
+  try {
+    const updated = await orderStore.updateStatus(order.value.id, displayStatus.value, {
+      gst_enabled: enabled,
+    });
+    order.value = { ...order.value, ...updated };
+  } catch (e) {
+    paymentError.value = e.response?.data?.error || 'Failed to update GST';
+  } finally {
+    savingGst.value = false;
   }
 }
 </script>
@@ -605,6 +604,11 @@ async function setGst(enabled) {
   font-weight: 600;
   cursor: pointer;
   transition: $transition;
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: wait;
+  }
 
   &:hover:not(:disabled) {
     border-color: $primary;

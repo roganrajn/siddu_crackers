@@ -1,6 +1,6 @@
 import pool from '../config/db.js';
 import { sendOrderEmails } from './email.service.js';
-import { calculateOrderBreakdown, normalizeOrderSettings } from '../utils/orderPricing.js';
+import { applyGstToBreakdown, calculateOrderBreakdown, normalizeOrderSettings } from '../utils/orderPricing.js';
 
 const VALID_STATUSES = ['new', 'confirmed', 'paid', 'cancelled'];
 
@@ -119,7 +119,7 @@ async function createNotification(type, title, message, referenceId) {
 
 async function getOrderSettings(client) {
   const result = await client.query(
-    `SELECT min_order_amount, order_packing_percentage
+    `SELECT min_order_amount, order_packing_percentage, order_gst_percentage
      FROM website_settings ORDER BY id LIMIT 1`
   );
   return normalizeOrderSettings(result.rows[0] || {});
@@ -284,14 +284,15 @@ export async function createOrder(orderData) {
   }
 }
 
-export async function updateOrderStatus(orderId, status, note = null) {
-  const normalized = normalizeStatus(status);
-  if (!VALID_STATUSES.includes(normalized)) {
-    const err = new Error('Invalid status');
-    err.status = 400;
-    throw err;
-  }
+function parseOptionalBoolean(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (value === true || value === 'true' || value === '1' || value === 1) return true;
+  if (value === false || value === 'false' || value === '0' || value === 0) return false;
+  return Boolean(value);
+}
 
+export async function updateOrderStatus(orderId, status, note = null, extras = {}) {
   const id = parseInt(orderId, 10);
   if (!id) {
     const err = new Error('Invalid order id');
@@ -299,40 +300,82 @@ export async function updateOrderStatus(orderId, status, note = null) {
     throw err;
   }
 
+  const gstFlag = parseOptionalBoolean(extras.gst_enabled);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const result = await client.query(
-      `UPDATE orders SET
-        status = $1::varchar,
-        payment_method = CASE
-          WHEN $1::varchar = 'confirmed' THEN 'not_received'
-          ELSE payment_method
-        END,
-        payment_transaction_id = CASE
-          WHEN $1::varchar = 'confirmed' THEN NULL
-          ELSE payment_transaction_id
-        END,
-        payment_remarks = CASE
-          WHEN $1::varchar = 'confirmed' THEN NULL
-          ELSE payment_remarks
-        END,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2 RETURNING *`,
-      [normalized, id]
-    );
-
-    if (!result.rows[0]) {
+    const existing = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (!existing.rows[0]) {
       await client.query('ROLLBACK');
       const err = new Error('Order not found');
       err.status = 404;
       throw err;
     }
 
-    await logOrderStatus(client, id, normalized, note || `Status changed to ${normalized}`);
-    await client.query('COMMIT');
+    const current = existing.rows[0];
+    const prevStatus = normalizeStatus(current.status);
+    const nextStatus = status != null && status !== '' ? normalizeStatus(status) : prevStatus;
 
+    if (!VALID_STATUSES.includes(nextStatus)) {
+      const err = new Error('Invalid status');
+      err.status = 400;
+      throw err;
+    }
+
+    const statusChanged = nextStatus !== prevStatus;
+    const gstTouched = gstFlag !== undefined;
+    const clearPayment = statusChanged && nextStatus === 'confirmed';
+
+    let gstEnabled = Boolean(current.gst_enabled);
+    let gstRate = parseFloat(current.gst_rate ?? 0);
+    let gstAmount = parseFloat(current.gst_amount ?? 0);
+    let netAmount = parseFloat(current.net_amount ?? current.total_amount ?? 0);
+
+    if (gstTouched) {
+      gstEnabled = gstFlag;
+      const orderSettings = await getOrderSettings(client);
+      const priced = applyGstToBreakdown(
+        {
+          after_discount: current.after_discount,
+          packing_amount: current.packing_amount,
+        },
+        gstEnabled,
+        gstEnabled ? orderSettings.order_gst_percentage : 0
+      );
+      gstRate = priced.gst_rate;
+      gstAmount = priced.gst_amount;
+      netAmount = priced.net_amount;
+    }
+
+    const result = await client.query(
+      `UPDATE orders SET
+        status = $1::varchar,
+        payment_method = CASE WHEN $2::boolean THEN 'not_received' ELSE payment_method END,
+        payment_transaction_id = CASE WHEN $2::boolean THEN NULL ELSE payment_transaction_id END,
+        payment_remarks = CASE WHEN $2::boolean THEN NULL ELSE payment_remarks END,
+        gst_enabled = $3,
+        gst_rate = $4,
+        gst_amount = $5,
+        net_amount = $6,
+        total_amount = $6,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7 RETURNING *`,
+      [nextStatus, clearPayment, gstEnabled, gstRate, gstAmount, netAmount, id]
+    );
+
+    let logNote = note;
+    if (!logNote) {
+      if (statusChanged) logNote = `Status changed to ${nextStatus}`;
+      else if (gstTouched) logNote = gstEnabled ? 'GST enabled' : 'GST disabled';
+    }
+
+    if (statusChanged || gstTouched) {
+      await logOrderStatus(client, id, nextStatus, logNote);
+    }
+
+    await client.query('COMMIT');
     return result.rows[0];
   } catch (error) {
     try {

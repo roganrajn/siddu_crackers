@@ -62,9 +62,14 @@
           <label>Packing Charge (%)</label>
           <input v-model.number="form.order_packing_percentage" type="number" min="0" max="100" step="0.01" />
         </div>
+        <div class="form-group">
+          <label>GST (%)</label>
+          <input v-model.number="form.order_gst_percentage" type="number" min="0" max="100" step="0.01" />
+        </div>
       </div>
       <p class="settings-note">
         Product discounts come from each product's MRP and offer price. Summary shows overall savings (e.g. Upto 80% discount).
+        GST % is applied when billing is set to With GST on an order.
       </p>
 
       <h3 class="section-label">SEO & Analytics</h3>

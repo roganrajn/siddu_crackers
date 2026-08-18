@@ -27,7 +27,7 @@ router.put('/', authMiddleware, upload.single('logo'), async (req, res) => {
       'google_map_embed', 'meta_title', 'meta_description',
       'google_analytics_id', 'facebook_pixel_id',
       'facebook', 'instagram', 'youtube',
-      'min_order_amount', 'order_packing_percentage',
+      'min_order_amount', 'order_packing_percentage', 'order_gst_percentage',
     ];
 
     let logo = req.body.logo;

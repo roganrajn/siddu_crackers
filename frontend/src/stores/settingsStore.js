@@ -14,6 +14,7 @@ export const useSettingsStore = defineStore('settings', () => {
     confirmation_time: 'Within 2 hours',
     min_order_amount: 5000,
     order_packing_percentage: 5,
+    order_gst_percentage: 18,
     primary_color: '#7D3C5E',
     secondary_color: '#F04E8B',
     accent_color: '#00A9B0',

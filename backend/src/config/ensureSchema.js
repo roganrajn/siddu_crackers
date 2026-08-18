@@ -39,6 +39,20 @@ export async function ensureSchema() {
     ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_discount_percentage DECIMAL(5, 2) DEFAULT 70;
     ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_special_discount_percentage DECIMAL(5, 2) DEFAULT 15;
     ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_packing_percentage DECIMAL(5, 2) DEFAULT 5;
+    ALTER TABLE website_settings ADD COLUMN IF NOT EXISTS order_gst_percentage DECIMAL(5, 2) DEFAULT 18;
+  `);
+
+  await pool.query(`
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_enabled BOOLEAN DEFAULT false;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_rate DECIMAL(5, 2) DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_amount DECIMAL(10, 2) DEFAULT 0;
+  `);
+
+  await pool.query(`
+    UPDATE website_settings SET order_gst_percentage = 18 WHERE order_gst_percentage IS NULL;
+    UPDATE orders SET gst_enabled = false WHERE gst_enabled IS NULL;
+    UPDATE orders SET gst_rate = 0 WHERE gst_rate IS NULL;
+    UPDATE orders SET gst_amount = 0 WHERE gst_amount IS NULL;
   `);
 
   await pool.query(`
