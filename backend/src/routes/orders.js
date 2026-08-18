@@ -222,8 +222,16 @@ router.put('/:id/gst', authMiddleware, async (req, res) => {
 
 router.put('/:id/status', authMiddleware, async (req, res) => {
   try {
-    const order = await updateOrderStatus(req.params.id, req.body);
-    res.json(order);
+    console.log('[gst] PUT /status', req.params.id, {
+      status: req.body?.status,
+      gst_enabled: req.body?.gst_enabled,
+    });
+    const order = await updateOrderStatus(req.params.id, {
+      status: req.body?.status,
+      note: req.body?.note,
+      gst_enabled: req.body?.gst_enabled,
+    });
+    res.json({ ...order, gst_code: 'gst-v4' });
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
     if (error.status === 404) return res.status(404).json({ error: error.message });

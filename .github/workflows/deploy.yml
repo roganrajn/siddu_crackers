@@ -59,9 +59,13 @@ jobs:
             fi
 
             echo "Restarting Backend..."
-            cd backend
+            cd "$PROJECT_DIR/backend"
+            echo "Backend dir: $(pwd)"
+            grep -n "gst-v4" src/routes/orders.js
 
-            pm2 restart siddu-backend || pm2 start npm --name siddu-backend -- start
+            pm2 delete siddu-backend || true
+            pm2 start npm --name siddu-backend -- start
+            pm2 save
 
             echo "Updating Nginx upload limit..."
             NGINX_CONF="/etc/nginx/nginx.conf"
