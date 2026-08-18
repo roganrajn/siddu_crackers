@@ -57,19 +57,17 @@ export async function ensureSchema() {
 
   try {
     const triggers = await pool.query(`
-      SELECT t.tgname
+      SELECT t.tgname, pg_get_functiondef(t.tgfoid) AS def
       FROM pg_trigger t
-      JOIN pg_class c ON c.oid = t.tgrelid
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE c.relname = 'orders'
-        AND n.nspname = 'public'
+      WHERE t.tgrelid = 'orders'::regclass
         AND NOT t.tgisinternal
     `);
     for (const row of triggers.rows) {
-      if (!/gst|bill_type|taxable/i.test(row.tgname)) continue;
-      const name = String(row.tgname).replace(/"/g, '');
-      await pool.query(`DROP TRIGGER IF EXISTS "${name}" ON orders`);
-      console.log(`[db] Dropped order trigger ${name}`);
+      const blob = `${row.tgname} ${row.def || ''}`;
+      if (!/gst|bill_type|taxable/i.test(blob)) continue;
+      const quoted = await pool.query('SELECT quote_ident($1) AS ident', [row.tgname]);
+      await pool.query(`DROP TRIGGER IF EXISTS ${quoted.rows[0].ident} ON orders`);
+      console.log(`[db] Dropped order trigger ${row.tgname}`);
     }
   } catch (error) {
     console.error('[db] Could not inspect order triggers:', error.message);

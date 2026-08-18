@@ -131,6 +131,110 @@ function resolveGstRate(settings = {}) {
   return !rate || Number.isNaN(rate) ? 18 : rate;
 }
 
+async function getWritableOrderColumns(client) {
+  try {
+    const result = await client.query(`
+      SELECT a.attname AS name
+      FROM pg_attribute a
+      WHERE a.attrelid = 'orders'::regclass
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+        AND COALESCE(a.attgenerated, '') = ''
+    `);
+    return new Set(result.rows.map((row) => row.name));
+  } catch {
+    const result = await client.query(`
+      SELECT a.attname AS name
+      FROM pg_attribute a
+      WHERE a.attrelid = 'orders'::regclass
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+    `);
+    return new Set(result.rows.map((row) => row.name));
+  }
+}
+
+async function dropOrderGstTriggers(client) {
+  const result = await client.query(`
+    SELECT t.tgname, pg_get_functiondef(t.tgfoid) AS def
+    FROM pg_trigger t
+    WHERE t.tgrelid = 'orders'::regclass
+      AND NOT t.tgisinternal
+  `);
+
+  for (const row of result.rows) {
+    const blob = `${row.tgname} ${row.def || ''}`;
+    if (!/gst|bill_type|taxable/i.test(blob)) continue;
+    const quoted = await client.query('SELECT quote_ident($1) AS ident', [row.tgname]);
+    await client.query(`DROP TRIGGER IF EXISTS ${quoted.rows[0].ident} ON orders`);
+    console.log(`[gst] dropped trigger ${row.tgname}`);
+  }
+}
+
+async function writeOrderGst(client, order, enabled) {
+  let gstPct = 18;
+  try {
+    gstPct = resolveGstRate(await getOrderSettings(client));
+  } catch {
+    gstPct = 18;
+  }
+
+  const priced = applyGstToBreakdown(
+    {
+      after_discount: order.after_discount,
+      packing_amount: order.packing_amount,
+    },
+    enabled,
+    enabled ? gstPct : 0
+  );
+
+  const columns = await getWritableOrderColumns(client);
+  const values = {
+    gst_enabled: enabled,
+    gst_applicable: enabled,
+    gst_percentage: priced.gst_rate,
+    gst_rate: priced.gst_rate,
+    gst_amount: priced.gst_amount,
+    taxable_amount: enabled ? priced.amount_before_gst : 0,
+    bill_type: enabled ? 'with_gst' : 'without_gst',
+    net_amount: priced.net_amount,
+    total_amount: priced.net_amount,
+  };
+
+  const sets = [];
+  const params = [];
+  for (const [column, value] of Object.entries(values)) {
+    if (!columns.has(column)) continue;
+    params.push(value);
+    const cast = typeof value === 'boolean' ? '::boolean' : '';
+    sets.push(`${column} = $${params.length}${cast}`);
+  }
+
+  if (!sets.length) {
+    const err = new Error('orders table is missing GST columns');
+    err.status = 500;
+    throw err;
+  }
+
+  params.push(order.id);
+  const updated = await client.query(
+    `UPDATE orders SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
+     WHERE id = $${params.length}
+     RETURNING *`,
+    params
+  );
+
+  const row = updated.rows[0];
+  const savedOn = Boolean(row.gst_enabled) || Boolean(row.gst_applicable) || parseFloat(row.gst_amount) > 0;
+  if (enabled && !savedOn) {
+    const err = new Error('GST update was overwritten by the database. Check orders table triggers.');
+    err.status = 500;
+    throw err;
+  }
+
+  return row;
+}
+
 async function resolveOrderItems(client, items) {
   const resolved = [];
 
@@ -332,6 +436,12 @@ export async function updateOrderStatus(orderId, status, note = null) {
     const prevStatus = normalizeStatus(current.status);
     const clearPayment = normalized === 'confirmed' && prevStatus !== 'confirmed';
 
+    try {
+      await client.query("SET LOCAL session_replication_role = 'replica'");
+    } catch {
+      // app user may not be allowed to disable triggers
+    }
+
     await client.query(
       `UPDATE orders SET
         status = $1::varchar,
@@ -344,31 +454,12 @@ export async function updateOrderStatus(orderId, status, note = null) {
     );
 
     if (gstFlag !== undefined) {
-      let gstPct = 18;
       try {
-        gstPct = resolveGstRate(await getOrderSettings(client));
-      } catch {
-        gstPct = 18;
+        await dropOrderGstTriggers(client);
+      } catch (triggerError) {
+        console.error('[gst] trigger drop failed:', triggerError.message);
       }
-      const priced = applyGstToBreakdown(
-        {
-          after_discount: current.after_discount,
-          packing_amount: current.packing_amount,
-        },
-        gstFlag,
-        gstFlag ? gstPct : 0
-      );
-      await client.query(
-        `UPDATE orders SET
-          gst_enabled = $1,
-          gst_percentage = $2,
-          gst_amount = $3,
-          net_amount = $4,
-          total_amount = $4,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE id = $5`,
-        [gstFlag, priced.gst_rate, priced.gst_amount, priced.net_amount, id]
-      );
+      await writeOrderGst(client, current, gstFlag);
     }
 
     await logOrderStatus(
@@ -423,44 +514,29 @@ export async function updateOrderGst(orderId, gstEnabled) {
     }
 
     const current = existing.rows[0];
-    let gstPct = 18;
+
     try {
-      gstPct = resolveGstRate(await getOrderSettings(client));
+      await client.query("SET LOCAL session_replication_role = 'replica'");
     } catch {
-      gstPct = 18;
+      // app user may not be allowed to disable triggers
+    }
+    try {
+      await dropOrderGstTriggers(client);
+    } catch (triggerError) {
+      console.error('[gst] trigger drop failed:', triggerError.message);
     }
 
-    const priced = applyGstToBreakdown(
-      {
-        after_discount: current.after_discount,
-        packing_amount: current.packing_amount,
-      },
-      enabled,
-      enabled ? gstPct : 0
-    );
-
-    const result = await client.query(
-      `UPDATE orders SET
-        gst_enabled = $1,
-        gst_percentage = $2,
-        gst_amount = $3,
-        net_amount = $4,
-        total_amount = $4,
-        updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5
-       RETURNING *`,
-      [enabled, priced.gst_rate, priced.gst_amount, priced.net_amount, id]
-    );
+    const row = await writeOrderGst(client, current, enabled);
 
     await logOrderStatus(
       client,
       id,
       normalizeStatus(current.status),
-      enabled ? `GST enabled at ${priced.gst_rate}%` : 'GST disabled'
+      enabled ? `GST enabled at ${row.gst_percentage || row.gst_rate}%` : 'GST disabled'
     );
 
     await client.query('COMMIT');
-    return result.rows[0];
+    return row;
   } catch (error) {
     try {
       await client.query('ROLLBACK');

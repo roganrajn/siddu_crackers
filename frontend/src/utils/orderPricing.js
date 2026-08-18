@@ -80,13 +80,18 @@ export function calculateOrderBreakdown(items, settings = {}) {
 }
 
 export function isOrderGstEnabled(order) {
-  const flag = order?.gst_enabled;
-  return flag === true || flag === 't' || flag === 'true' || flag === 1 || flag === '1';
+  if (!order) return false;
+  const flag = order.gst_enabled ?? order.gst_applicable;
+  if (flag === true || flag === 't' || flag === 'true' || flag === 1 || flag === '1') return true;
+  if (flag === false || flag === 'f' || flag === 'false' || flag === 0 || flag === '0') {
+    return parseFloat(order.gst_amount) > 0;
+  }
+  return parseFloat(order.gst_amount) > 0;
 }
 
 export function getOrderGstRate(order, settings = {}) {
   if (isOrderGstEnabled(order)) {
-    const stored = parseFloat(order.gst_percentage ?? 0);
+    const stored = parseFloat(order.gst_percentage ?? order.gst_rate ?? 0);
     if (!Number.isNaN(stored) && stored > 0) return stored;
   }
   const fromSettings = parseFloat(settings.order_gst_percentage ?? DEFAULT_GST_RATE);
